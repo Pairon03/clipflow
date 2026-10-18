@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import ffmpeg, framing, subtitles
+from . import enhance, ffmpeg, framing, subtitles
 from .context import JobContext
 from .errors import PipelineError
 
@@ -20,25 +20,35 @@ class TimeMap:
     """Mapeia tempo relativo ao início do corte → tempo do vídeo final (após remover pausas)."""
 
     intervals: list[tuple[float, float]]
+    speed: float = 1.0  # >1 acelera (o vídeo final fica mais curto)
 
     @property
     def duration(self) -> float:
-        return sum(b - a for a, b in self.intervals)
+        return sum(b - a for a, b in self.intervals) / self.speed
 
     def map(self, t: float) -> float:
         acc = 0.0
         for a, b in self.intervals:
             if t < a:
-                return acc  # dentro de uma pausa removida: encosta no próximo trecho
+                return acc / self.speed  # dentro de uma pausa removida: encosta no próximo trecho
             if t <= b:
-                return acc + (t - a)
+                return (acc + (t - a)) / self.speed
             acc += b - a
-        return acc
+        return acc / self.speed
+
+
+# Ritmo: até quanto silêncio entre palavras é mantido e quanto de "respiro" fica em cada lado do corte
+PACES = {
+    "natural": {"max_pause": 0.7, "keep_pad": 0.15},
+    "tiktok": {"max_pause": 0.28, "keep_pad": 0.07},  # corta respirações e hesitações
+}
+MIN_SPEED, MAX_SPEED = 1.0, 1.25
 
 
 def keep_intervals(words: list[dict], clip_start: float, clip_end: float, trim: bool,
                    max_pause: float = 0.7, keep_pad: float = 0.15) -> list[tuple[float, float]]:
-    """Intervalos (relativos ao início do corte) a manter. Pausas longas viram pausas curtas."""
+    """Intervalos (relativos ao início do corte) a manter. Pausas maiores que `max_pause` são removidas,
+    sobrando só `keep_pad` de cada lado (no ritmo TikTok, as respirações entre frases somem)."""
     dur = clip_end - clip_start
     if not trim or len(words) < 2:
         return [(0.0, dur)]
@@ -49,7 +59,7 @@ def keep_intervals(words: list[dict], clip_start: float, clip_end: float, trim: 
         if gap > max_pause:
             cut_a = w["end"] - clip_start + keep_pad
             cut_b = nxt["start"] - clip_start - keep_pad
-            if cut_b - cut_a > 0.2:
+            if cut_b - cut_a > 0.08:
                 out.append((cur_a, cut_a))
                 cur_a = cut_b
     out.append((cur_a, dur))
@@ -122,22 +132,46 @@ def layout_filter(plan: dict, src_w: int, src_h: int, out_w: int, out_h: int, in
             f"scale={out_w}:{out_h}:flags=lanczos,setsar=1[{outp}]")
 
 
+def snap_intervals(intervals: list[tuple[float, float]], fps: float) -> list[tuple[float, float]]:
+    """Alinha os cortes à grade de quadros do vídeo, para áudio e vídeo cortarem exatamente juntos."""
+    out = []
+    for a, b in intervals:
+        fa, fb = round(a * fps), round(b * fps)
+        if fb > fa:
+            out.append((round(fa / fps, 6), round(fb / fps, 6)))
+    return out or [(0.0, round(max(intervals[-1][1], 1 / fps), 6))]
+
+
+def _select_expr(intervals: list[tuple[float, float]], fps: float) -> str:
+    half = 0.5 / fps
+    return "+".join(f"between(t,{a:.4f},{b - half:.4f})" for a, b in intervals)
+
+
 def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: int, src_h: int, fps: float,
-                      ass_path: Path | None, out_duration: float) -> str:
+                      ass_path: Path | None, out_duration: float, speed: float = 1.0,
+                      hook_len: float | None = None) -> str:
+    """Monta o filtro do FFmpeg.
+
+    Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
+    para cada corte: assim a memória não cresce com o número de cortes (ritmo TikTok).
+    O áudio é fatiado em blocos do tamanho de um quadro, então os dois cortam no mesmo ponto.
+    `hook_len`: gancho de abertura, lido da 2ª entrada ([1:v]/[1:a]) e colocado antes de tudo.
+    """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
-    if len(intervals) == 1:
-        a, b = intervals[0]
-        parts.append(f"[0:v]trim=start={a}:end={b},setpts=PTS-STARTPTS[vc]")
-        parts.append(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[ac]")
-    else:
-        labels = []
-        for i, (a, b) in enumerate(intervals):
-            parts.append(f"[0:v]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]")
-            parts.append(f"[0:a]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[a{i}]")
-            labels.append(f"[v{i}][a{i}]")
-        parts.append(f"{''.join(labels)}concat=n={len(intervals)}:v=1:a=1[vc][ac]")
-    parts.append(f"[vc]fps={fps:g}[vf]")
+    nsamples = max(1, round(48000 / fps))
+    expr = _select_expr(intervals, fps)
+    main_v, main_a = ("vm", "am") if hook_len else ("vc", "ac")
+    parts.append(f"[0:v]setpts=PTS-STARTPTS,fps={fps:g},select='{expr}',setpts=N/({fps:g}*TB)[{main_v}]")
+    parts.append(f"[0:a]asetpts=PTS-STARTPTS,aresample=48000,asetnsamples=n={nsamples}:p=0,"
+                 f"aselect='{expr}',asetpts=N/SR/TB[{main_a}]")
+    if hook_len:
+        parts.append(f"[1:v]setpts=PTS-STARTPTS,fps={fps:g},trim=end={hook_len:.4f},setpts=PTS-STARTPTS[vh]")
+        parts.append(f"[1:a]asetpts=PTS-STARTPTS,aresample=48000,atrim=end={hook_len:.4f},asetpts=PTS-STARTPTS,"
+                     f"afade=t=out:st={max(hook_len - 0.03, 0):.3f}:d=0.03[ah]")
+        parts.append("[vh][ah][vm][am]concat=n=2:v=1:a=1[vc][ac]")
+    speed_v = f"setpts=PTS/{speed:g}," if speed != 1.0 else ""
+    parts.append(f"[vc]{speed_v}fps={fps:g}[vf]")
     parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vl"))
     post = []
     if ass_path is not None:
@@ -147,7 +181,7 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     post.append(f"fade=t=in:st=0:d={FADE_IN},fade=t=out:st={fo_start:.3f}:d={FADE_OUT}")
     post.append("format=yuv420p")
     parts.append(f"[vl]{','.join(post)}[vout]")
-    audio = []
+    audio = [f"atempo={speed:g}"] if speed != 1.0 else []  # acelera mantendo o tom de voz
     if config.get("render.loudnorm"):
         audio.append("loudnorm=I=-14:TP=-1.5:LRA=11")
     audio.append(f"afade=t=in:st=0:d={FADE_IN},afade=t=out:st={fo_start:.3f}:d={FADE_OUT}")
@@ -157,6 +191,17 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
 
 
 # ---------------------------------------------------------------- render
+def _interp(keyframes: list[tuple[float, float]], t: float) -> float:
+    if not keyframes:
+        return 0.5
+    if t <= keyframes[0][0]:
+        return keyframes[0][1]
+    for (t0, x0), (t1, x1) in zip(keyframes, keyframes[1:]):
+        if t0 <= t <= t1:
+            return x0 + (x1 - x0) * ((t - t0) / (t1 - t0) if t1 > t0 else 0)
+    return keyframes[-1][1]
+
+
 def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], options: dict,
                 out_dir: Path, sub_dir: Path, work_dir: Path, ctx: JobContext, variant: str = "") -> dict:
     """Renderiza um corte. Retorna informações do resultado. Lança PipelineError em falha."""
@@ -177,11 +222,24 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     ctx.check()
 
     # 2) linha do tempo final (remoção de pausas longas)
-    intervals = keep_intervals(words, start, end, trim=bool(options.get("trim_silence", True)),
-                               max_pause=float(options.get("max_pause", 0.7)))
-    tmap = TimeMap(intervals)
-    out_duration = round(tmap.duration, 3)
-    plan["keyframes"] = [(round(tmap.map(t), 3), x) for t, x in plan.get("keyframes", [])]
+    pace = PACES.get(options.get("pace", ""), None)
+    max_pause = pace["max_pause"] if pace else float(options.get("max_pause", 0.7))
+    keep_pad = pace["keep_pad"] if pace else 0.15
+    speed = min(max(float(options.get("speed", 1.0) or 1.0), MIN_SPEED), MAX_SPEED)
+    intervals = snap_intervals(keep_intervals(words, start, end, trim=bool(options.get("trim_silence", True)),
+                                              max_pause=max_pause, keep_pad=keep_pad), fps)
+    tmap = TimeMap(intervals, speed)
+    # gancho de abertura: a fala mais chamativa toca primeiro e o vídeo segue do começo
+    hook = enhance.pick_cold_open(words, start, end) if options.get("cold_open", False) else None
+    if hook:
+        hook = snap_intervals([hook], fps)[0]
+    hook_out = round((hook[1] - hook[0]) / speed, 3) if hook else 0.0
+    out_duration = round(hook_out + tmap.duration, 3)
+    source_kf = plan.get("keyframes", [])
+    plan["keyframes"] = [(round(hook_out + tmap.map(t), 3), x) for t, x in source_kf]
+    if hook:
+        xh = _interp(source_kf, (hook[0] + hook[1]) / 2)
+        plan["keyframes"] = [(0.0, xh), (max(hook_out - 0.001, 0.0005), xh)] + plan["keyframes"]
     # remove keyframes duplicados que caíram no mesmo instante após o mapeamento
     dedup: list[tuple[float, float]] = []
     for t, x in plan["keyframes"]:
@@ -194,9 +252,16 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
 
     # 3) legendas no tempo final
     out_words = []
+    if hook:
+        for w in words:
+            rs, re_ = w["start"] - start, w["end"] - start
+            if rs >= hook[0] - 0.01 and re_ <= hook[1] + 0.05:
+                s0 = (rs - hook[0]) / speed
+                e0 = min(max((re_ - hook[0]) / speed, s0 + 0.04), hook_out)
+                out_words.append({"text": w["text"], "start": round(s0, 3), "end": round(e0, 3)})
     for w in words:
-        s = tmap.map(w["start"] - start)
-        e = tmap.map(w["end"] - start)
+        s = hook_out + tmap.map(w["start"] - start)
+        e = hook_out + tmap.map(w["end"] - start)
         if e - s < 0.04:
             e = s + 0.04
         out_words.append({"text": w["text"], "start": round(s, 3), "end": round(min(e, out_duration), 3)})
@@ -204,19 +269,22 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     ass_path = None
     if options.get("captions", True) and out_words:
         style = subtitles.resolve_style(options.get("caption_style", "classic"), options.get("caption_colors"))
+        theme = options.get("theme_text") if options.get("theme", True) else None
         ass_path = subtitles.build_ass(out_words, style, out_w, out_h, sub_dir / f"{clip_id}.ass",
-                                       centered=plan["layout"] == "split")
+                                       centered=plan["layout"] == "split", theme=theme)
     srt_path = subtitles.build_srt(out_words, sub_dir / f"{clip_id}.srt") if out_words else None
 
     # 4) FFmpeg
     ctx.span(a + (b - a) * 0.35, a + (b - a) * 0.92, ctx.stage)
-    graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration)
+    graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
+                              hook_len=(hook[1] - hook[0]) if hook else None)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
     final = out_dir / f"{clip_id}{variant}.mp4"
     args = [
         "-ss", f"{start:.3f}", "-t", f"{end - start + 0.1:.3f}", "-i", str(src),
+        *(["-ss", f"{start + hook[0]:.3f}", "-t", f"{hook[1] - hook[0] + 0.1:.3f}", "-i", str(src)] if hook else []),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", config.get("render.video_preset"), "-crf", str(config.get("render.crf")),
         "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(fps),
@@ -243,6 +311,9 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "words_out": out_words,
         "render_info": {"layout": plan["layout"], "detector": plan.get("detector"), "faces": plan.get("faces"),
                         "note": plan.get("note", ""), "keyframes": len(plan.get("keyframes", [])),
-                        "intervals": len(intervals), "removed_pause_s": round((end - start) - out_duration, 2),
+                        "intervals": len(intervals), "removed_pause_s": round((end - start) - tmap.duration * speed, 2),
+                        "speed": speed, "pace": options.get("pace", "natural"),
+                        "cold_open": [hook[0], hook[1]] if hook else None,
+                        "theme": options.get("theme_text") if ass_path and options.get("theme", True) else None,
                         "fps": fps, "tracks": plan.get("tracks", [])},
     }

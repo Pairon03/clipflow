@@ -93,16 +93,20 @@ def rerank(candidates: list[dict]) -> dict[int, dict] | None:
 
 
 METADATA_SYSTEM = (
-    "Você cria títulos e descrições para YouTube Shorts em português do Brasil. Regras obrigatórias: "
-    "use apenas informações presentes na transcrição; não invente declarações; não atribua falas que "
-    "não existem; nada de clickbait enganoso; títulos com no máximo 70 caracteres. Responda em JSON."
+    "Você é social media de cortes de podcast e cria títulos e descrições para TikTok, Reels e YouTube Shorts "
+    "em português do Brasil. A descrição deve ser chamativa: começa com um gancho curto com 1 emoji, depois "
+    "uma frase que gere curiosidade e termina com uma chamada para comentar ou seguir. NÃO transcreva a fala. "
+    "Regras obrigatórias: use apenas informações presentes na transcrição; não invente declarações nem "
+    "atribua falas que não existem; nada de clickbait enganoso; títulos com no máximo 70 caracteres. "
+    "Responda em JSON."
 )
 
 
 def metadata(transcript_text: str, source_title: str) -> dict | None:
     prompt = (
         f"Vídeo de origem: {source_title}\nTranscrição do corte:\n\"\"\"{transcript_text[:3000]}\"\"\"\n\n"
-        'Formato: {"titulos": ["", "", ""], "descricao": "2 a 3 frases", '
+        'Formato: {"titulos": ["", "", ""], "tema": "tema do corte em até 5 palavras", '
+        '"descricao": "gancho + curiosidade + chamada, até 3 linhas", '
         '"hashtags": ["#..."], "palavras_chave": ["..."], "texto_curto": "1 frase para publicação"}'
     )
     data = generate_json(prompt, METADATA_SYSTEM)

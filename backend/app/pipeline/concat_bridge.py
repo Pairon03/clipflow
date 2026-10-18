@@ -25,7 +25,7 @@ from .errors import FatalPipelineError, PipelineError
 from .ffmpeg import _CREATE_NO_WINDOW
 
 PROTOCOL_VERSION = "2025-06-18"
-HOOK_DURATION_S = 2.6
+HOOK_DURATION_S = 2.8
 TIMEOUT_S = 120
 
 
@@ -248,10 +248,10 @@ def build_project(exe: Path, location: Path, name: str, video: Path, words: list
         if hook:
             # gancho no topo; as legendas seguem embaixo. Não passa do fim do vídeo
             hook_end = min(HOOK_DURATION_S, max((e["end"] for e in entries), default=HOOK_DURATION_S))
-            # perto do topo (acima dos rostos) e com margem lateral de 8%
-            c.call("title_add", {"path": path, "start": 0.0, "duration": hook_end, "above": True, "offsetY": -0.36,
-                                 "style": {"content": hook, "fontFamily": font, "fontWeight": max(weight, 700),
-                                           "fontSize": 0.036, "color": "#ffffff", "background": "#7C3AEDE6",
+            # tema no meio da tela (um pouco acima do centro), com margem lateral de 8%
+            c.call("title_add", {"path": path, "start": 0.0, "duration": hook_end, "above": True, "offsetY": -0.08,
+                                 "style": {"content": hook.upper(), "fontFamily": font, "fontWeight": max(weight, 700),
+                                           "fontSize": 0.042, "color": "#ffffff", "background": "#7C3AEDE6",
                                            "align": "center", "maxWidth": 0.84}})
         if entries:
             c.call("captions_add", {"path": path, "captions": entries, "offsetY": 0.2,

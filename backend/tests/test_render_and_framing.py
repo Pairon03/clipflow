@@ -117,3 +117,39 @@ def test_filtergraph_has_no_shell_metachar_injection():
     g = render.build_filtergraph([(0, 5)], plan, 1920, 1080, 30, None, 5)
     assert not re.search(r"[;&|`$]\s*(rm|del|curl)", g)
     assert "[vout]" in g and "[aout]" in g
+
+
+def test_tiktok_pace_speed_and_cold_open_render(sample_two, tmp_path):
+    """Ritmo TikTok + 1.1x + gancho: duração bate com a linha do tempo e o tema entra no ASS."""
+    import pysubs2
+
+    from app.pipeline import transcribe
+    from app.pipeline.context import null_context
+
+    src = sample_two["video"]
+    info = ffmpeg.probe(src).as_dict()
+    t = transcribe.import_subtitles(sample_two["srt"], info["duration"])
+    words = render.words_for_clip(transcribe.all_words(t), 0.45, 30.5)
+    clip = {"id": "eeeeeeeeeeee", "start": 0.45, "end": 30.5, "layout": "follow"}
+    natural = render.render_clip(src, info, clip | {"id": "ffffffffffff"}, words, {"pace": "natural"},
+                                 tmp_path, tmp_path, tmp_path, null_context())
+    fast = render.render_clip(src, info, clip, words,
+                              {"pace": "tiktok", "speed": 1.1, "cold_open": True, "theme_text": "TEMA\nDO VÍDEO"},
+                              tmp_path, tmp_path, tmp_path, null_context())
+    ri = fast["render_info"]
+    assert ri["cold_open"] and ri["speed"] == 1.1 and ri["removed_pause_s"] > natural["render_info"]["removed_pause_s"]
+    hook_len = (ri["cold_open"][1] - ri["cold_open"][0]) / 1.1
+    main_natural = natural["duration"]
+    assert fast["duration"] < main_natural / 1.1 + hook_len + 0.3  # cortou respirações além da aceleração
+    subs = pysubs2.load(str(tmp_path / "eeeeeeeeeeee.ass"))
+    theme = [e for e in subs if e.style == "Theme"]
+    assert theme and "TEMA\\NDO VÍDEO" in theme[0].text and theme[0].start == 0
+    first_caption = min((e for e in subs if e.style == "Caption"), key=lambda e: e.start)
+    assert first_caption.start / 1000 < 0.5  # o gancho já começa falando
+
+
+def test_snap_intervals_on_frame_grid():
+    snapped = render.snap_intervals([(0.0, 1.234), (2.01, 3.0)], 30)
+    for a, b in snapped:
+        assert abs(a * 30 - round(a * 30)) < 1e-4 and abs(b * 30 - round(b * 30)) < 1e-4
+    assert render.TimeMap([(0, 2), (3, 5)], 2.0).duration == pytest.approx(2.0)

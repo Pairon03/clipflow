@@ -60,6 +60,20 @@ cp config.example.toml config.toml
    legenda, trocar por alternativas ou mudar o enquadramento antes de renderizar.
 7. Baixe cada Short (MP4 + SRT) ou tudo em ZIP — o ZIP inclui um arquivo com os títulos e descrições sugeridos.
 
+### Estilo TikTok: ritmo, gancho, tema e descrições
+
+- **Ritmo TikTok** (padrão): corta respirações e silêncios entre as falas, deixando só um respiro curto em cada
+  corte. O ritmo **Natural** remove apenas pausas longas. Dá para acelerar levemente (1.1x ou 1.2x) sem mudar o
+  tom da voz.
+- **Gancho de abertura:** o vídeo começa com a fala mais forte do trecho e depois volta para o início normal. Só
+  acontece quando há uma frase de destaque, curta e completa, mais para frente no corte.
+- **Tema no meio da tela** nos primeiros ~3 segundos, numa faixa roxa.
+- **Descrições chamativas:** gancho com emoji, a frase mais forte da fala entre aspas, uma chamada para comentar
+  ou seguir, o crédito do episódio e hashtags (inclusive do convidado e do programa, quando o título do vídeo
+  segue o formato "CONVIDADO - Programa #123").
+
+Na página do projeto, o painel de estilo refaz os Shorts prontos (vídeo e descrição) sem transcrever de novo.
+
 ### Dicas para computadores modestos
 
 Em **Configurações**: modelo Whisper `base` (ou `tiny`), 1 tarefa simultânea, preset `veryfast` e, se

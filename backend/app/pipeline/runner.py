@@ -199,11 +199,22 @@ def _render_one(src: Path, info: dict, clip: dict, words: list[dict], opts: dict
     return result
 
 
+def _theme_for(meta: dict) -> str | None:
+    """Tema do corte (meio da tela no início): o da IA local, se houver, senão o melhor título."""
+    from . import enhance
+
+    if meta.get("theme"):
+        return enhance.theme_text([meta["theme"]])
+    return enhance.theme_text(meta.get("titles") or [])
+
+
 def _concat_enhancements(words_out: list[dict], duration: float, layout: str, opts: dict,
                          titles: list[str]) -> tuple[str | None, list[dict], int]:
     from . import enhance
 
-    hook = enhance.hook_text(titles) if opts.get("hook", True) else None
+    hook = None
+    if opts.get("hook", True) and opts.get("theme", True):
+        hook = opts.get("theme_text") or enhance.theme_text(titles)
     zooms = []
     # no layout dividido o zoom cortaria os dois rostos; fica desligado
     if opts.get("zoom", True) and layout != "split":
@@ -288,9 +299,10 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         last_exc: Exception | None = None
         text = " ".join(w["text"] for w in words)
         meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
+        clip_opts = opts | {"theme_text": _theme_for(meta)}
         for attempt in range(2):
             try:
-                result = _render_one(src, info, clip, words, opts, meta, out_dir, sub_dir, work_dir, ctx)
+                result = _render_one(src, info, clip, words, clip_opts, meta, out_dir, sub_dir, work_dir, ctx)
                 db.update("clips", clip["id"], status="done", output_path=result["output_path"],
                           thumb_path=result["thumb_path"], srt_path=result["srt_path"],
                           duration=result["duration"], size_bytes=result["size_bytes"],
@@ -359,8 +371,10 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
                                storage.area_dir("clips", pid), ctx, variant="_clean")
     ctx.check()
     ctx.span(0.75, 1.0, "Criando projeto no Concat")
-    titles = clip["titles"] or metadata.generate(" ".join(w["text"] for w in words),
-                                                 p["source_title"] or p["name"], clip["category"])["titles"]
+    meta = {"titles": clip["titles"]} if clip["titles"] else metadata.generate(
+        " ".join(w["text"] for w in words), p["source_title"] or p["name"], clip["category"])
+    titles = meta["titles"]
+    opts = opts | {"theme_text": _theme_for(meta)}
     hook, zoom_keys, _ = _concat_enhancements(clean["words_out"], clean["duration"],
                                               clean["render_info"]["layout"], opts, titles)
     project_dir = concat_bridge.build_project(

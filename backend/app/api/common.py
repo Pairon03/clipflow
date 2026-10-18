@@ -17,6 +17,7 @@ STYLES = {
 }
 CAPTION_STYLES = {"classic", "neon", "minimal", "impact"}
 LAYOUTS = {"auto", "follow", "speaker", "split", "fit", "center", "manual"}
+PACES = {"natural", "tiktok"}  # tiktok: corta respirações e silêncios entre falas
 ENGINES = {"ffmpeg", "concat"}  # concat: zoom de ênfase, texto de gancho e exportação pelo Concat
 MAX_CLIP_SECONDS = 180  # limite atual do YouTube Shorts
 
@@ -72,6 +73,15 @@ def validate_options(raw: dict | None) -> dict:
     layout = raw.get("layout") or preset["layout"]
     if layout not in LAYOUTS:
         raise HTTPException(422, "Enquadramento inválido")
+    pace = raw.get("pace") or "tiktok"
+    if pace not in PACES:
+        raise HTTPException(422, "Ritmo inválido")
+    try:
+        speed = round(float(raw.get("speed", 1.0) or 1.0), 2)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Velocidade inválida")
+    if not 1.0 <= speed <= 1.25:
+        raise HTTPException(422, "Velocidade deve ficar entre 1.0x e 1.25x")
     engine = raw.get("engine") or "ffmpeg"
     if engine not in ENGINES:
         raise HTTPException(422, "Motor de edição inválido")
@@ -103,6 +113,10 @@ def validate_options(raw: dict | None) -> dict:
         "engine": engine,
         "hook": bool(raw.get("hook", True)),
         "zoom": bool(raw.get("zoom", True)),
+        "pace": pace,
+        "speed": speed,
+        "theme": bool(raw.get("theme", True)),
+        "cold_open": bool(raw.get("cold_open", True)),
     }
 
 

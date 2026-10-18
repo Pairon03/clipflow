@@ -146,7 +146,7 @@ def test_real_concat(sample_two, tmp_path):
             c2.initialize()
             c2.call("project_open", {"path": str(tmp_path / "proj" / "real2")})
             full = json.dumps(c2.call("project_get", {"path": str(tmp_path / "proj" / "real2")}))
-        assert "O maior erro" in full and '"scale"' in full
+        assert "O MAIOR ERRO" in full and '"scale"' in full
         with concat_bridge.ConcatClient(exe, [tmp_path]) as c:
             c.initialize()
             c.call("project_open", {"path": str(out)})
@@ -181,7 +181,7 @@ def test_render_engine_concat_with_hook_and_zoom(fake_concat, sample_moving):
     tools = [x["tool"] for x in sent]
     assert "export_start" in tools and "title_add" in tools
     hook_call = next(x for x in sent if x["tool"] == "title_add")
-    assert hook_call["args"]["start"] == 0.0 and hook_call["args"]["style"]["content"] == info["hook"]
+    assert hook_call["args"]["start"] == 0.0 and hook_call["args"]["style"]["content"] == info["hook"].upper()
     assert tools.count("keyframe_set") == 4 * info["zooms"]
     out = ffmpeg.probe(c["output_path"])
     assert (out.width, out.height, out.video_codec, out.audio_codec) == (1080, 1920, "h264", "aac")

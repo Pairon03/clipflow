@@ -55,3 +55,44 @@ def test_hook_text():
     assert all(len(line) <= 22 for line in h.split("\n"))
     assert enhance.hook_text(["x" * 200, "Título curto e bom"]) == "Título curto e bom"
     assert enhance.hook_text([]) is None
+
+
+def test_cold_open_picks_emphatic_sentence_later_in_clip():
+    words, dur = words_for(TEXT)
+    hook = enhance.pick_cold_open(words, 0.0, dur)
+    assert hook is not None
+    a, b = hook
+    assert a >= enhance.COLD_OPEN_MIN_POS_S - 0.1
+    assert enhance.COLD_OPEN_MIN_S - 0.1 <= b - a <= enhance.COLD_OPEN_MAX_S + 0.3
+    spoken = " ".join(w["text"] for w in words if a - 0.01 <= w["start"] and w["end"] <= b + 0.01)
+    assert any(k in spoken for k in ("mudou", "Nunca", "noventa", "sabia")), spoken
+
+
+def test_no_cold_open_for_short_or_flat_clips():
+    words, dur = words_for(["a casa é azul.", "o carro é verde.", "a mesa é bege."] * 3)
+    assert enhance.pick_cold_open(words, 0.0, dur) is None
+    short, d2 = words_for(TEXT[:1])
+    assert enhance.pick_cold_open(short, 0.0, d2) is None
+
+
+def test_theme_text_short_and_wrapped():
+    t = enhance.theme_text(["Qual foi o maior erro que você cometeu no começo da carreira?"])
+    assert len(t.replace("\n", " ")) <= 44 and t.count("\n") <= 2
+    assert enhance.theme_text([]) is None
+
+
+def test_description_is_catchy_not_transcript():
+    from app.pipeline import metadata
+
+    text = ("Qual foi o maior erro da sua carreira? O maior erro foi brigar com o treinador. "
+            "Eu nunca mais faço isso!")
+    m = metadata.heuristic(text, "CRAQUE NETO - Podpah #1093", "Pergunta e resposta")
+    d = m["description"]
+    assert not d.startswith(text[:40])  # não começa com a transcrição
+    first = d.split("\n")[0]
+    assert any(ord(ch) > 0x2000 for ch in first)  # gancho com emoji
+    assert any(cta in d for cta in ("Comenta", "Marca", "Segue", "Salva", "comenta"))
+    assert "#craqueneto" in m["hashtags"] and "#podpah" in m["hashtags"] and "#cortes" in m["hashtags"]
+    assert m["titles"][1].startswith("Craque Neto: “")
+    assert metadata.parse_source("CRAQUE NETO - Podpah #1093") == ("Craque Neto", "Podpah")
+    assert metadata.parse_source("Um vídeo qualquer") == (None, None)

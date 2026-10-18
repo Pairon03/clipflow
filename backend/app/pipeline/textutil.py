@@ -64,9 +64,18 @@ def clean_token(tok: str) -> str:
     return re.sub(r"^[^\wÀ-ÿ]+|[^\wÀ-ÿ]+$", "", tok.lower())
 
 
+# palavras comuns demais para virar tema/hashtag
+WEAK_KEYWORDS = set("""
+maior menor melhor pior muito muita muitos muitas grande grandes pequeno coisa vez vezes hoje ontem
+amanhã sempre nunca tempo anos dia dias pessoa pessoas verdade mano parada negócio jeito forma momento
+lado parte certo certa mesma mesmos própria próprio aquilo aqueles depois antes ainda enquanto então
+porque quando onde tudo nada cada outro outra outros outras sério pouco pouca mais menos bastante
+""".split())
+
+
 def keywords(text: str, top: int = 8) -> list[str]:
     toks = [clean_token(t) for t in re.split(r"\s+", text)]
-    toks = [t for t in toks if len(t) > 3 and t not in STOPWORDS and not t.isdigit()]
+    toks = [t for t in toks if len(t) > 3 and t not in STOPWORDS and t not in WEAK_KEYWORDS and not t.isdigit()]
     counts = Counter(toks)
     # bônus para palavras mais longas (tendem a ser mais informativas)
     ranked = sorted(counts.items(), key=lambda kv: (kv[1] * (1 + min(len(kv[0]), 12) / 12)), reverse=True)

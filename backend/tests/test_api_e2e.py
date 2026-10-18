@@ -109,7 +109,7 @@ def test_caption_sync_matches_speech(client, sample_two, tmp_path):
         seg = x[int(t0 * sr):int(t1 * sr)]
         return float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0
 
-    starts = [e.start / 1000 for e in subs if "\\fad" in e.text]  # início de cada bloco
+    starts = [e.start / 1000 for e in subs if "\\fad" in e.text and e.style == "Caption"]  # início de cada bloco
     assert len(starts) >= 3
     voiced = [rms(t, t + 0.25) > 0.01 for t in starts]
     assert sum(voiced) / len(voiced) >= 0.9, voiced

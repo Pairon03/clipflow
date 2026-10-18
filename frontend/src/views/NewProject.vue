@@ -89,6 +89,10 @@ const form = reactive({
   engine: 'ffmpeg',
   hook: true,
   zoom: true,
+  pace: 'tiktok',
+  speed: 1.0,
+  theme: true,
+  cold_open: true,
   rightsConfirmed: false,
   rightsBasis: 'own',
   rightsNote: '',
@@ -125,6 +129,7 @@ async function submit(force = false) {
         style: form.style, caption_style: form.caption_style, layout: form.layout,
         captions: form.captions, trim_silence: form.trim_silence, review: form.review,
         engine: form.engine, hook: form.hook, zoom: form.zoom,
+        pace: form.pace, speed: form.speed, theme: form.theme, cold_open: form.cold_open,
       },
       force,
     }
@@ -322,6 +327,28 @@ onMounted(async () => {
               <option v-for="(label, key) in LAYOUT_LABELS" :key="key" :value="key" :disabled="key === 'manual'">{{ label }}</option>
             </select>
             <p class="mt-1.5 text-xs text-ink-500">Automático: segue o rosto principal ou divide a tela quando há duas pessoas distantes. Ajuste fino por corte na revisão.</p>
+          </div>
+
+          <div>
+            <span class="label">Ritmo</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button class="rounded-xl border p-3 text-left transition" :class="form.pace === 'tiktok' ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'" @click="form.pace = 'tiktok'">
+                <div class="text-sm font-medium text-ink-100">TikTok</div>
+                <div class="text-xs text-ink-400">Corta respirações e silêncios entre as falas</div>
+              </button>
+              <button class="rounded-xl border p-3 text-left transition" :class="form.pace === 'natural' ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'" @click="form.pace = 'natural'">
+                <div class="text-sm font-medium text-ink-100">Natural</div>
+                <div class="text-xs text-ink-400">Só remove pausas longas</div>
+              </button>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              <span class="text-xs text-ink-400">Velocidade:</span>
+              <button v-for="v in [1.0, 1.1, 1.2]" :key="v" class="chip py-1.5" :class="{ 'chip-active': form.speed === v }" @click="form.speed = v">{{ v.toFixed(1) }}x</button>
+            </div>
+            <div class="mt-3 space-y-2 text-sm">
+              <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Gancho: começar pela fala mais forte</span><input v-model="form.cold_open" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+              <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Tema no meio da tela no início</span><input v-model="form.theme" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+            </div>
           </div>
 
           <div>

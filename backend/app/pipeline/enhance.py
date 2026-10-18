@@ -16,7 +16,7 @@ ZOOM_IN_S = 0.2
 ZOOM_OUT_S = 0.3
 MIN_GAP_S = 4.0          # distância mínima entre dois zooms
 SECONDS_PER_ZOOM = 8.0   # no máximo um zoom a cada ~8 s de vídeo
-HOOK_DURATION_S = 2.6
+HOOK_DURATION_S = 2.8
 
 _EMPHASIS = [norm(m) for m in MARKERS["Frase de impacto"] + MARKERS["Emocionante"] + MARKERS["Curiosidade"]]
 
@@ -100,3 +100,54 @@ def hook_text(titles: list[str], max_chars: int = 60, line_chars: int = 20) -> s
             cur = f"{cur} {word}".strip()
     lines.append(cur)
     return "\n".join(lines[:3])
+
+
+# ------------------------------------------------------------------ gancho de abertura e tema
+COLD_OPEN_MIN_S = 1.5
+COLD_OPEN_MAX_S = 4.5
+COLD_OPEN_MIN_POS_S = 3.0   # a fala precisa estar mais para frente; se já é o início, não há o que antecipar
+
+
+def pick_cold_open(words: list[dict], clip_start: float, clip_end: float) -> tuple[float, float] | None:
+    """Escolhe a fala mais chamativa do corte para abrir o vídeo (antes do começo normal).
+
+    Retorna (início, fim) relativos ao início do corte, ou None se nada se destacar.
+    Só usa frases completas e curtas, para o gancho fazer sentido sozinho.
+    """
+    from .selection import build_sentences
+
+    if clip_end - clip_start < 12 or len(words) < 6:
+        return None
+    best, best_score = None, 0.0
+    for s in build_sentences(words, max_sentence_s=COLD_OPEN_MAX_S):
+        dur = s.end - s.start
+        rel = s.start - clip_start
+        if not (COLD_OPEN_MIN_S <= dur <= COLD_OPEN_MAX_S) or rel < COLD_OPEN_MIN_POS_S:
+            continue
+        if clip_end - s.end < 1.0:
+            continue
+        text = s.text
+        score = _group_score(text)
+        if text.rstrip().endswith("!"):
+            score += 0.5
+        if clean_token(s.words[0]["text"]) in {"e", "mas", "aí", "então", "porque", "que"}:
+            score -= 1.0  # começa pendurado no que veio antes
+        if score > best_score:
+            best, best_score = (s.start, s.end), score
+    if best is None or best_score < 1.0:
+        return None
+    a = max(best[0] - clip_start - 0.05, 0.0)
+    b = min(best[1] - clip_start + 0.15, clip_end - clip_start)
+    return round(a, 3), round(b, 3)
+
+
+def theme_text(titles: list[str], max_chars: int = 42, line_chars: int = 16) -> str | None:
+    """Tema curto para o centro da tela, em até 3 linhas, a partir do melhor título."""
+    for t in titles or []:
+        t = t.strip().strip("“”\"").rstrip("…").strip()
+        if not t:
+            continue
+        if len(t) > max_chars:
+            t = t[:max_chars].rsplit(" ", 1)[0].rstrip(",;:-") + "…"
+        return hook_text([t], max_chars=max_chars + 1, line_chars=line_chars)
+    return None

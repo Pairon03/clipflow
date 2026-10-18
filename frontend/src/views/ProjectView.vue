@@ -18,6 +18,7 @@ const showLog = ref(false)
 const acting = ref(false)
 const showAlternatives = ref(false)
 const reselect = ref({ count: 5, min_duration: 30, max_duration: 60 })
+const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, theme: true })
 let timer
 
 const active = computed(() => p.value && ACTIVE.includes(p.value.status))
@@ -39,7 +40,10 @@ async function loadLog() {
   log.value = await api(`/api/projects/${props.id}/log?lines=300`).catch(() => '')
 }
 watch(() => p.value?.options, (o) => {
-  if (o) reselect.value = { count: o.count, min_duration: o.min_duration, max_duration: o.max_duration }
+  if (o) {
+    reselect.value = { count: o.count, min_duration: o.min_duration, max_duration: o.max_duration }
+    edit.value = { pace: o.pace || 'natural', speed: o.speed || 1.0, cold_open: !!o.cold_open, theme: o.theme !== false }
+  }
 }, { immediate: true })
 
 onMounted(() => {
@@ -64,6 +68,13 @@ const cancel = () => act(() => api(`/api/projects/${props.id}/cancel`, { method:
 const retry = () => act(() => api(`/api/projects/${props.id}/retry`, { method: 'POST' }), 'Processamento reiniciado')
 const renderAll = () => act(() => api(`/api/projects/${props.id}/render`, { method: 'POST', body: {} }), 'Renderização iniciada')
 const renderOne = (id) => act(() => api(`/api/projects/${props.id}/render`, { method: 'POST', body: { clip_ids: [id] } }), 'Renderizando corte')
+async function applyEditAndRender() {
+  await act(async () => {
+    await api(`/api/projects/${props.id}/options`, { method: 'PATCH', body: { options: edit.value } })
+    const ids = done.value.map((c) => c.id)
+    await api(`/api/projects/${props.id}/render`, { method: 'POST', body: ids.length ? { clip_ids: ids } : {} })
+  }, 'Refazendo os Shorts com o novo estilo')
+}
 const doReselect = () => act(() => api(`/api/projects/${props.id}/reselect`, { method: 'POST', body: reselect.value }), 'Nova seleção pronta')
 async function remove() {
   if (!confirm('Excluir o projeto e TODOS os arquivos (vídeo original, transcrição e Shorts)?')) return
@@ -140,6 +151,29 @@ async function remove() {
         <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           <ClipResult v-for="c in done" :key="c.id + (c.rendered_at || '')" :clip="c" @changed="load" @deleted="load" />
         </div>
+      </section>
+
+      <!-- estilo de edição (refazer Shorts prontos) -->
+      <section v-if="p.has_transcript" class="card p-5">
+        <div class="flex flex-wrap items-end gap-4">
+          <div>
+            <span class="label">Ritmo</span>
+            <div class="flex gap-2">
+              <button class="chip py-1.5" :class="{ 'chip-active': edit.pace === 'tiktok' }" @click="edit.pace = 'tiktok'">TikTok</button>
+              <button class="chip py-1.5" :class="{ 'chip-active': edit.pace === 'natural' }" @click="edit.pace = 'natural'">Natural</button>
+            </div>
+          </div>
+          <div>
+            <span class="label">Velocidade</span>
+            <div class="flex gap-2">
+              <button v-for="v in [1.0, 1.1, 1.2]" :key="v" class="chip py-1.5" :class="{ 'chip-active': edit.speed === v }" @click="edit.speed = v">{{ v.toFixed(1) }}x</button>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 pb-2 text-sm text-ink-200"><input v-model="edit.cold_open" type="checkbox" class="h-4 w-4 accent-violet-500" /> Gancho no início</label>
+          <label class="flex items-center gap-2 pb-2 text-sm text-ink-200"><input v-model="edit.theme" type="checkbox" class="h-4 w-4 accent-violet-500" /> Tema no meio da tela</label>
+          <button class="btn-primary ml-auto" :disabled="!canEdit || acting" @click="applyEditAndRender"><Wand2 class="h-4 w-4" /> {{ done.length ? 'Refazer Shorts com este estilo' : 'Salvar estilo' }}</button>
+        </div>
+        <p class="mt-2 text-xs text-ink-500">Refaz os vídeos e também as descrições, sem transcrever de novo.</p>
       </section>
 
       <!-- revisão -->

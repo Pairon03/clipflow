@@ -114,8 +114,26 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("{", "(").replace("}", ")")
 
 
+THEME_DURATION_S = 2.8
+
+
+def _theme_event(subs: SSAFile, theme: str, style: CaptionStyle, width: int, height: int, centered: bool) -> None:
+    """Tema do vídeo no meio da tela, numa faixa roxa, com entrada suave."""
+    subs.styles["Theme"] = SSAStyle(
+        fontname="Anton" if style.name == "impact" else "Poppins ExtraBold", fontsize=96,
+        primarycolor=hex_to_color("#FFFFFF"), outlinecolor=hex_to_color("#7C3AED"),
+        backcolor=hex_to_color("#000000", 160), outline=22, shadow=0, borderstyle=3,
+        alignment=Alignment.MIDDLE_CENTER, marginl=int(width * 0.1), marginr=int(width * 0.1),
+    )
+    y = int(height * (0.33 if centered else 0.42))  # no layout dividido a legenda já ocupa o centro
+    lines = "\\N".join(_escape(line) for line in theme.upper().split("\n"))
+    subs.append(SSAEvent(start=0, end=int(THEME_DURATION_S * 1000), style="Theme",
+                         text=f"{{\\pos({width // 2},{y})\\fad(120,220)\\t(0,160,\\fscx106\\fscy106)"
+                              f"\\t(160,300,\\fscx100\\fscy100)}}{lines}"))
+
+
 def build_ass(words: list[dict], style: CaptionStyle, width: int, height: int, path: Path,
-              centered: bool = False) -> Path:
+              centered: bool = False, theme: str | None = None) -> Path:
     """Gera o arquivo .ass. `words` devem estar no tempo do vídeo final (segundos).
 
     `centered=True` posiciona a legenda no meio da tela (usado no layout dividido,
@@ -160,6 +178,8 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int, height: int, p
                 prefix += r"{\fad(60,0)}"
             subs.append(SSAEvent(start=int(start * 1000), end=int(end * 1000), style="Caption",
                                  text=prefix + " ".join(parts)))
+    if theme:
+        _theme_event(subs, theme, style, width, height, centered)
     subs.save(str(path), encoding="utf-8")
     return path
 
