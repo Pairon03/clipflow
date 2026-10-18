@@ -196,3 +196,33 @@ def test_missing_ffmpeg_fails_fast_with_instructions(monkeypatch):
     monkeypatch.setattr(ffmpeg, "_find", lambda name: None)
     with pytest.raises(FatalPipelineError, match="winget install Gyan.FFmpeg"):
         runner.run_analysis("000000000000", null_context())
+
+
+def test_whisper_receives_decoded_audio(sample_two, tmp_path, monkeypatch):
+    """O Whisper recebe o áudio já decodificado (numpy), sem depender do decodificador PyAV."""
+    import numpy as np
+    from types import SimpleNamespace
+
+    from app.pipeline import ffmpeg
+
+    wav = tmp_path / "a.wav"
+    ffmpeg.extract_audio(sample_two["video"], wav)
+    seen = {}
+
+    class FakeModel:
+        def transcribe(self, audio, **kw):
+            seen["audio"] = audio
+            seen["kw"] = kw
+            w = [SimpleNamespace(word=" Olá", start=1.0, end=1.4, probability=0.9),
+                 SimpleNamespace(word=" mundo.", start=1.5, end=2.0, probability=0.8)]
+            seg = SimpleNamespace(start=1.0, end=2.0, text=" Olá mundo.", words=w, no_speech_prob=0.0, avg_logprob=-0.2)
+            return iter([seg]), SimpleNamespace(language="pt", duration=len(audio) / 16000)
+
+    monkeypatch.setattr(transcribe, "_load_model", lambda *a: FakeModel())
+    t = transcribe.transcribe_whisper(wav, sample_two["duration"], null_context())
+    audio = seen["audio"]
+    assert isinstance(audio, np.ndarray) and audio.dtype == np.float32
+    assert abs(len(audio) / 16000 - sample_two["duration"]) < 0.2
+    assert -1.0 <= audio.min() and audio.max() <= 1.0 and np.abs(audio).max() > 0.05  # há fala
+    assert seen["kw"]["word_timestamps"] is True
+    assert [w["text"] for w in transcribe.all_words(t)] == ["Olá", "mundo."]

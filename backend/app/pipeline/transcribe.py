@@ -17,9 +17,11 @@ from __future__ import annotations
 import json
 import re
 import threading
+import wave
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pysubs2
 
 from .. import config
@@ -75,6 +77,30 @@ def _load_model(model_name: str, device: str, compute_type: str):
         return _model_cache[key]
 
 
+def load_wav(path: Path) -> np.ndarray:
+    """Lê o WAV mono 16 kHz (extraído pelo FFmpeg) como float32, o formato que o Whisper espera.
+
+    Passar o áudio já decodificado evita o decodificador interno do faster-whisper (PyAV),
+    que quebra com algumas versões novas do PyAV ("unexpected keyword argument 'metadata_errors'").
+    """
+    with wave.open(str(path), "rb") as wf:
+        if wf.getsampwidth() != 2 or wf.getframerate() != 16000:
+            raise PipelineError("Áudio de análise em formato inesperado (esperado WAV 16 kHz, 16 bits)")
+        channels = wf.getnchannels()
+        out = np.empty(wf.getnframes(), dtype=np.float32)
+        pos = 0
+        while True:  # em blocos, para não duplicar a memória em episódios longos
+            raw = wf.readframes(16000 * 60)
+            if not raw:
+                break
+            x = np.frombuffer(raw, dtype=np.int16)
+            if channels > 1:
+                x = x.reshape(-1, channels).mean(axis=1)
+            out[pos:pos + len(x)] = x / 32768.0
+            pos += len(x)
+    return out[:pos]
+
+
 def transcribe_whisper(audio_path: Path, duration: float, ctx: JobContext) -> dict:
     model_name = config.get("transcription.model")
     device = config.get("transcription.device")
@@ -84,7 +110,7 @@ def transcribe_whisper(audio_path: Path, duration: float, ctx: JobContext) -> di
     model = _load_model(model_name, device, compute_type)
     ctx.check()
     segments_iter, info = model.transcribe(
-        str(audio_path),
+        load_wav(audio_path),
         language=language,
         word_timestamps=True,
         vad_filter=bool(config.get("transcription.vad_filter")),
