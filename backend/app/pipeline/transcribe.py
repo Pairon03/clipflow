@@ -79,6 +79,38 @@ def _load_model(model_name: str, device: str, compute_type: str):
         return _model_cache[key]
 
 
+SAMPLE_RATE = 16000
+CHUNK_S = 600          # ~10 min por parte: o Whisper prepara o áudio inteiro de cada parte na memória
+CHUNK_SEARCH_S = 30    # procura o ponto mais silencioso até 30 s antes/depois de cada divisão
+
+
+def chunk_bounds(audio: np.ndarray, sr: int = SAMPLE_RATE, chunk_s: int = CHUNK_S,
+                 search_s: int = CHUNK_SEARCH_S) -> list[tuple[int, int]]:
+    """Divide áudios longos em partes, cortando no trecho mais silencioso perto de cada divisão.
+
+    Sem isso, um episódio de 2h+ pede vários GB num único bloco de memória ao Whisper.
+    """
+    n = len(audio)
+    if n <= (chunk_s + search_s) * sr:
+        return [(0, n)]
+    win = int(0.5 * sr)
+    cuts = [0]
+    pos = chunk_s * sr
+    while pos < n - search_s * sr:
+        lo, hi = max(pos - search_s * sr, cuts[-1] + win), min(pos + search_s * sr, n - win)
+        region = audio[lo:hi]
+        k = len(region) // win
+        if k >= 1:
+            energy = np.sqrt(np.mean(region[: k * win].reshape(k, win) ** 2, axis=1))
+            cut = lo + int(np.argmin(energy)) * win + win // 2
+        else:
+            cut = pos
+        cuts.append(cut)
+        pos = cut + chunk_s * sr
+    cuts.append(n)
+    return [(a, b) for a, b in zip(cuts, cuts[1:]) if b > a]
+
+
 def load_wav(path: Path) -> np.ndarray:
     """Lê o WAV mono 16 kHz (extraído pelo FFmpeg) como float32, o formato que o Whisper espera.
 
@@ -164,33 +196,43 @@ def _transcribe(audio: np.ndarray, duration: float, ctx: JobContext, model_name:
         _register_nvidia_dlls()
     model = _load_model(model_name, device, compute_type)
     ctx.check()
-    segments_iter, info = model.transcribe(
-        audio,
-        language=language,
-        word_timestamps=True,
-        vad_filter=bool(config.get("transcription.vad_filter")),
-        vad_parameters={"min_silence_duration_ms": 700},
-        beam_size=5,
-        condition_on_previous_text=False,
-    )
-    total = duration or getattr(info, "duration", 0) or 1.0
+    sr = SAMPLE_RATE
+    total = duration or len(audio) / sr or 1.0
     segments: list[dict] = []
-    for seg in segments_iter:
+    detected = language or ""
+    bounds = chunk_bounds(audio)
+    if len(bounds) > 1:
+        ctx.log.info("Áudio longo: transcrevendo em %d partes de ~%d min", len(bounds), CHUNK_S // 60)
+    for a, b in bounds:
         ctx.check()
-        ctx.progress(seg.end / total)
-        if getattr(seg, "no_speech_prob", 0) > 0.7 and getattr(seg, "avg_logprob", 0) < -1.0:
-            continue  # provável alucinação em trecho sem fala
-        words = [
-            {"text": w.word.strip(), "start": round(w.start, 3), "end": round(w.end, 3),
-             "prob": round(float(w.probability), 3)}
-            for w in (seg.words or []) if w.word.strip()
-        ]
-        if not words:
-            continue
-        segments.append({"start": words[0]["start"], "end": words[-1]["end"],
-                         "text": seg.text.strip(), "words": words})
+        offset = a / sr
+        segments_iter, info = model.transcribe(
+            audio[a:b],
+            language=language,
+            word_timestamps=True,
+            vad_filter=bool(config.get("transcription.vad_filter")),
+            vad_parameters={"min_silence_duration_ms": 700},
+            beam_size=5,
+            condition_on_previous_text=False,
+        )
+        detected = detected or getattr(info, "language", "")
+        for seg in segments_iter:
+            ctx.check()
+            ctx.progress((offset + seg.end) / total)
+            if getattr(seg, "no_speech_prob", 0) > 0.7 and getattr(seg, "avg_logprob", 0) < -1.0:
+                continue  # provável alucinação em trecho sem fala
+            words = [
+                {"text": w.word.strip(), "start": round(offset + w.start, 3), "end": round(offset + w.end, 3),
+                 "prob": round(float(w.probability), 3)}
+                for w in (seg.words or []) if w.word.strip()
+            ]
+            if not words:
+                continue
+            segments.append({"start": words[0]["start"], "end": words[-1]["end"],
+                             "text": seg.text.strip(), "words": words})
+        del segments_iter
     ctx.progress(1.0)
-    return {"engine": f"faster-whisper:{model_name}:{device}", "language": getattr(info, "language", language or ""),
+    return {"engine": f"faster-whisper:{model_name}:{device}", "language": detected,
             "duration": total, "segments": _drop_repetitions(segments)}
 
 

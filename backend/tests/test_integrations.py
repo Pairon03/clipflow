@@ -274,3 +274,35 @@ def test_whisper_explicit_cuda_gives_instructions(sample_two, tmp_path, monkeypa
             transcribe.transcribe_whisper(wav, sample_two["duration"], null_context())
     finally:
         config.set_override("transcription.device", "auto")
+
+
+def test_long_audio_is_transcribed_in_parts(monkeypatch):
+    """Áudio de 2h é dividido em partes (memória limitada) e os tempos voltam somados corretamente."""
+    import numpy as np
+    from types import SimpleNamespace
+
+    sr = 16000
+    rng = np.random.default_rng(0)
+    audio = (rng.standard_normal(sr * 7200) * 0.1).astype(np.float32)  # 2 h de "fala"
+    for t in (590, 1215):  # silêncios perto das divisões
+        audio[t * sr:(t + 2) * sr] = 0
+    bounds = transcribe.chunk_bounds(audio)
+    assert len(bounds) >= 11 and bounds[0][0] == 0 and bounds[-1][1] == len(audio)
+    assert max(b - a for a, b in bounds) <= (transcribe.CHUNK_S + 2 * transcribe.CHUNK_SEARCH_S) * sr
+    assert 590 * sr <= bounds[0][1] <= 592 * sr  # cortou no silêncio, não no meio da fala
+
+    calls = []
+
+    class FakeModel:
+        def transcribe(self, chunk, **kw):
+            calls.append(len(chunk))
+            w = [SimpleNamespace(word=" oi", start=1.0, end=1.5, probability=0.9)]
+            seg = SimpleNamespace(start=1.0, end=1.5, text=" oi", words=w, no_speech_prob=0.0, avg_logprob=-0.1)
+            return iter([seg]), SimpleNamespace(language="pt", duration=len(chunk) / sr)
+
+    monkeypatch.setattr(transcribe, "_load_model", lambda *a: FakeModel())
+    t = transcribe._transcribe(audio, 7200, null_context(), "small", "cpu", "int8")
+    assert len(calls) == len(bounds) and max(calls) < len(audio)
+    starts = [w["start"] for w in transcribe.all_words(t)]
+    assert starts[0] == 1.0 and starts[1] == pytest.approx(bounds[1][0] / sr + 1.0, abs=0.01)
+    assert starts == sorted(starts)
