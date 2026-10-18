@@ -184,7 +184,8 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
                       ass_path: Path | None, out_duration: float, speed: float = 1.0,
                       hook_len: float | None = None, overlay_input: int | None = None,
                       overlay_until: float | None = None, color_filter: str | None = None,
-                      video_fx: str | None = None, mute: str | None = None, sfx_input: int | None = None) -> str:
+                      video_fx: str | None = None, mute: str | None = None, sfx_input: int | None = None,
+                      band_top: int = 0) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
@@ -193,6 +194,7 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     `hook_len`: gancho de abertura, lido da 2ª entrada ([1:v]/[1:a]) e colocado antes de tudo.
     `color_filter`: cadeia de filtros de cor aplicada ao vídeo antes do título e da legenda.
     `video_fx`: zooms/transição (effects_filter); `mute`: silencia palavrões; `sfx_input`: faixa de efeitos.
+    `band_top`: altura (px) de uma faixa branca no topo; o vídeo é enquadrado na área abaixo dela.
     """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
@@ -209,8 +211,9 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
         parts.append("[vh][ah][vm][am]concat=n=2:v=1:a=1[vc][ac]")
     speed_v = f"setpts=PTS/{speed:g}," if speed != 1.0 else ""
     parts.append(f"[vc]{speed_v}fps={fps:g}[vf]")
-    post_layout = ",".join(f for f in (color_filter, video_fx) if f)
-    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vgr" if post_layout else "vlay"))
+    pad = f"pad={out_w}:{out_h}:0:{band_top}:color=white" if band_top else None
+    post_layout = ",".join(f for f in (color_filter, video_fx, pad) if f)
+    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h - band_top, "vf", "vgr" if post_layout else "vlay"))
     if post_layout:
         parts.append(f"[vgr]{post_layout}[vlay]")
     if overlay_input is not None:
@@ -343,14 +346,17 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         card_png = overlay.render_card(title_style, options["title_card"], work_dir / f"{clip_id}{variant}.title.png",
                                        out_w, out_h, position="split" if split else
                                        ("center" if options.get("title_position") == "meio" else "top"))
+    band = overlay.band_height(out_h) if card_png and title_style == "faixa" else 0
     overlay_until = None
-    if card_png and options.get("title_duration") == "inicio":
+    if card_png and options.get("title_duration") == "inicio" and not band:
         overlay_until = min(TITLE_START_S, out_duration)
     ass_path = None
     if options.get("captions", True) and out_words:
         style = subtitles.resolve_style(options.get("caption_style", "classic"), options.get("caption_colors"))
         below = None
-        if card_png and split:  # legenda (no meio) desce para baixo do título enquanto ele aparece
+        if band and split:  # com faixa, a divisão do layout dividido desce junto com o vídeo
+            below = (None, band + (out_h - band) // 2 - 70)
+        elif card_png and split:  # legenda (no meio) desce para baixo do título enquanto ele aparece
             from PIL import Image
 
             with Image.open(card_png) as im:
@@ -368,7 +374,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     zooms = []
     if options.get("zoom_fx", False) and not split:
         zooms = enhance.pick_zooms(out_words, out_duration, skip_start=hook_out + 0.8)
-    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h)
+    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band)
     sfx_path = sfx.build_track(out_duration, work_dir / f"{clip_id}{variant}.sfx.wav", options.get("sfx"),
                                whoosh_at=hook_out if hook and transition != "nenhuma" else None,
                                pop_at=([0.05] if card_png else []) + [s for s, _ in zooms],
@@ -379,7 +385,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                               hook_len=(hook[1] - hook[0]) if hook else None,
                               overlay_input=overlay_idx, overlay_until=overlay_until,
                               color_filter=color.chain(options.get("color_filter")), video_fx=video_fx,
-                              mute=censor.mute_filter(muted), sfx_input=sfx_idx)
+                              mute=censor.mute_filter(muted), sfx_input=sfx_idx, band_top=band)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"

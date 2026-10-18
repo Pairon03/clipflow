@@ -16,9 +16,9 @@ STYLES = {
     "educativo": {"label": "Educativo", "caption_style": "minimal", "layout": "follow", "max_pause": 0.8},
     "dinamico": {"label": "Dinâmico", "caption_style": "impact", "layout": "auto", "max_pause": 0.45},
 }
-CAPTION_STYLES = {"classic", "neon", "minimal", "impact"}
+CAPTION_STYLES = {"classic", "neon", "minimal", "impact", "amarela"}
 LAYOUTS = {"auto", "follow", "speaker", "split", "fit", "center", "manual"}
-TITLE_STYLES = {"tweet", "caixa", "citacao", "variar", "nenhum"}
+TITLE_STYLES = {"tweet", "caixa", "citacao", "faixa", "variar", "nenhum"}
 PACES = {"natural", "tiktok"}  # tiktok: corta respirações e silêncios entre falas
 COLOR_FILTERS = set(_COLOR_FILTERS)  # filtros de cor (gradação) do vídeo
 ENGINES = {"ffmpeg", "concat"}  # concat: zoom de ênfase, texto de gancho e exportação pelo Concat

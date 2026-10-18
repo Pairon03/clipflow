@@ -323,8 +323,8 @@ onMounted(async () => {
               <button v-for="(c, key) in CAPTION_LABELS" :key="key" class="rounded-xl border p-3 text-left transition"
                       :class="form.caption_style === key ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'"
                       @click="form.caption_style = key">
-                <div class="rounded-lg bg-black/60 px-2 py-2 text-center text-sm font-extrabold tracking-wide" :style="{ fontFamily: c.font === 'Anton' ? 'Impact, Anton, sans-serif' : 'inherit' }">
-                  <span class="text-white" :style="{ textShadow: key === 'minimal' ? '0 2px 4px #000' : '0 0 3px #000, 0 0 3px #000' }">ISSO </span>
+                <div class="rounded-lg bg-black/60 px-2 py-2 text-center text-sm font-extrabold tracking-wide" :class="{ italic: c.italic }" :style="{ fontFamily: c.font === 'Anton' ? 'Impact, Anton, sans-serif' : 'inherit' }">
+                  <span :style="{ color: c.base || '#fff', textShadow: key === 'minimal' ? '0 2px 4px #000' : '0 0 3px #000, 0 0 3px #000' }">ISSO </span>
                   <span :style="{ color: c.hl, textShadow: key === 'neon' ? '0 0 8px #7c3aed' : '0 0 3px #000' }">MUDA</span>
                 </div>
                 <div class="mt-2 text-sm font-medium text-ink-100">{{ c.name }}</div>

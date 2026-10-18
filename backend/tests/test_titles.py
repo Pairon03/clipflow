@@ -173,3 +173,57 @@ def test_filter_preview_endpoint(client, tmp_path):
     assert client.get("/api/filters/preview?name=nao-existe").status_code == 422
     assert [f["key"] for f in client.get("/api/filters").json()][0] == "nenhum"
     assert client.get("/api/filters/preview?name=pb&project_id=../../x").status_code == 404
+
+
+def test_band_title_and_text(tmp_path):
+    card = {"headline": "Craque Neto mandou o papo reto", "topic_line": "Craque Neto sobre Neymar"}
+    assert overlay.card_text("faixa", card) == "Craque Neto mandou o papo reto"
+    assert overlay.card_text("faixa", {"topic_line": "Zico sobre Flamengo"}) == "Zico sobre Flamengo"
+    out = overlay.render_card("faixa", card, tmp_path / "f.png", 1080, 1920, position="center")
+    img = Image.open(out)
+    band = overlay.band_height(1920)
+    assert img.getpixel((5, 5)) == (255, 255, 255, 255)            # faixa branca sempre no topo
+    assert img.getpixel((5, band + 5))[3] == 0                     # abaixo dela, transparente (vídeo)
+    assert img.convert("L").crop((0, 0, 1080, band)).getextrema()[0] < 40  # texto preto na faixa
+
+
+def test_yellow_caption_names_in_red_and_no_overlap(tmp_path):
+    import pysubs2
+
+    from app.pipeline import subtitles
+
+    words = [{"text": t, "start": i * 0.3, "end": i * 0.3 + 0.28} for i, t in
+             enumerate("Você sabia que o Leo Dias falou com o Neto ontem à noite.".split())]
+    st = subtitles.resolve_style("amarela")
+    subs = pysubs2.load(str(subtitles.build_ass(words, st, 1080, 1920, tmp_path / "a.ass")))
+    assert subs.styles["Caption"].italic and subs.styles["Caption"].fontsize == 116
+    red = subtitles.ass_color("#FF2E2E")
+    text = " ".join(e.text for e in subs)
+    assert f"{{\\c{red}}}Leo" in text and f"{{\\c{red}}}Dias" in text and f"{{\\c{red}}}Neto" in text
+    assert f"{{\\c{red}}}Você" not in text                          # início de frase não é nome
+    events = sorted((e.start, e.end) for e in subs)
+    assert len(events) >= 3
+    for (_, e1), (s2, _) in zip(events, events[1:]):
+        assert e1 <= s2                                             # nunca dois blocos ao mesmo tempo
+
+
+def test_band_render_moves_video_below(sample_two, tmp_path):
+    from app.pipeline import ffmpeg, render, transcribe
+    from app.pipeline.context import null_context
+
+    src = sample_two["video"]
+    info = ffmpeg.probe(src).as_dict()
+    t = transcribe.import_subtitles(sample_two["srt"], info["duration"])
+    words = render.words_for_clip(transcribe.all_words(t), 0.45, 8.5)
+    res = render.render_clip(src, info, {"id": "band00000001", "start": 0.45, "end": 8.5, "layout": "follow"}, words,
+                             {"title_style_resolved": "faixa", "title_duration": "inicio",
+                              "title_card": {"headline": "Teste da faixa"}, "caption_style": "amarela"},
+                             tmp_path, tmp_path, tmp_path, null_context())
+    assert res["render_info"]["title_style"] == "faixa"
+    frame = tmp_path / "f.png"
+    ffmpeg.run(["-ss", "6", "-i", res["output_path"], "-frames:v", "1", str(frame)])
+    img = Image.open(frame).convert("RGB")
+    assert img.size == (1080, 1920)
+    assert min(img.getpixel((20, 20))) > 235                       # faixa continua depois de 4 s
+    band = overlay.band_height(1920)
+    assert max(img.getpixel((20, band + 40))) < 200                # vídeo começa logo abaixo

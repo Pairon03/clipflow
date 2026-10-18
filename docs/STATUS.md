@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **145 testes automatizados:
-143 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **148 testes automatizados:
+146 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -48,6 +48,8 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Gancho de abertura (fala forte antes do início) | ✅ | só quando há frase curta, completa e de destaque; testado com vídeo sintético |
 | Títulos tweet / caixa / citação / variar | ✅ | PNG desenhado com Pillow e sobreposto pelo FFmpeg; quadros renderizados conferidos visualmente, inclusive no layout dividido |
 | Identidade do canal (nome, @, logo) no cartão de tweet | ✅ | upload validado, recorte quadrado de 256 px |
+| Título "faixa branca" (manchete no topo, vídeo abaixo) | ✅ | quadros conferidos nos layouts seguir e dividido |
+| Legenda "Amarela" (itálico, nomes próprios em vermelho) | ✅ | fonte Poppins ExtraBold Italic (OFL); nomes = inicial maiúscula fora do começo da frase |
 | Título no topo ou no meio da tela | ✅ | centralizado pela altura real do cartão; quadro renderizado conferido |
 | Transição depois do gancho (zoom, flash, escurecer) | ✅ | quadros renderizados conferidos |
 | Zoom de ênfase no motor FFmpeg | ✅ | scale por quadro + crop; no máximo um a cada ~8 s |

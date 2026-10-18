@@ -72,6 +72,7 @@ export const CAPTION_LABELS = {
   neon: { name: 'Neon', desc: 'Branco com destaque roxo', hl: '#B266FF', font: 'Poppins' },
   minimal: { name: 'Minimal', desc: 'Branco com sombra discreta', hl: '#FFFFFF', font: 'Poppins' },
   impact: { name: 'Impact', desc: 'Grande, palavras-chave em destaque', hl: '#FFD60A', font: 'Anton' },
+  amarela: { name: 'Amarela', desc: 'Itálico amarelo, nomes em vermelho', hl: '#FF2E2E', base: '#FFE11A', italic: true, font: 'Poppins' },
 }
 
 // Notificações simples

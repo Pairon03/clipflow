@@ -80,9 +80,13 @@ cp config.example.toml config.toml
     (padrão: "Você achou a melhor página de cortes do TikTok") — ou um resumo do trecho, se preferir.
   - **Caixa**: caixa branca com barra roxa ("Fulano explica: …", "Fulano responde: pergunta").
   - **Citação**: ícone verde de aspas e a frase real do convidado em caixa alta.
+  - **Faixa branca**: faixa branca no topo com a manchete em caixa alta e o vídeo enquadrado logo abaixo
+    (mostra mais do cenário), como nas páginas de cortes de futebol.
   - **Variar**: cada corte do projeto abre com um estilo diferente (tweet → caixa → citação…). **Nenhum** desliga.
   - Duração: o vídeo inteiro ou só os primeiros ~4 s. Posição: **topo** ou **meio da tela** (logo acima da
     legenda). No layout dividido, o título fica na divisão entre as duas pessoas e a legenda desce para baixo dele.
+- **Legenda "Amarela":** itálico amarelo com contorno preto grosso, blocos curtos em duas linhas e nomes próprios
+  em vermelho ("com **Leo Dias**, né?"), no estilo das páginas de cortes de podcast.
 - **Efeitos (sem exagero):**
   - **Transição depois do gancho:** zoom rápido ("soco"), flash ou escurecer, no ponto em que o vídeo volta ao começo.
   - **Zoom nos momentos mais fortes:** aproximação suave de 10% nas falas com mais ênfase (no máximo um a cada ~8 s;
@@ -232,7 +236,7 @@ clipflow-studio/
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               145 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               148 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -256,7 +260,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 145 testes (~7 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 148 testes (~7 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

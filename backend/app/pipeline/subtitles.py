@@ -48,6 +48,9 @@ class CaptionStyle:
     max_words: int = 4
     glow: bool = False
     position: float = 0.30   # distância da base, como fração da altura
+    italic: bool = False
+    side_margin: float = 0.08  # margem lateral (fração da largura); maior = blocos em 2 linhas curtas
+    names_color: str | None = None  # cor dos nomes próprios (ex.: "com Leo Dias")
 
 
 PRESETS: dict[str, CaptionStyle] = {
@@ -58,6 +61,11 @@ PRESETS: dict[str, CaptionStyle] = {
                             shadow_color="#000000", highlight_active=False, max_chars=28, max_words=5),
     "impact": CaptionStyle("impact", "Anton", 112, "#FFFFFF", "#FFD60A", "#000000", 7, 3, uppercase=True,
                            pop=True, keyword_color="#39FF88", max_chars=16, max_words=3),
+    # estilo das páginas de cortes de podcast: amarelo em itálico, contorno grosso, nomes em vermelho,
+    # blocos curtos em duas linhas, sem destaque palavra a palavra
+    "amarela": CaptionStyle("amarela", "Poppins ExtraBold", 116, "#FFE11A", "#FFE11A", "#000000", 8, 2,
+                            highlight_active=False, max_chars=20, max_words=4, italic=True, side_margin=0.2,
+                            names_color="#FF2E2E", position=0.32),
 }
 
 
@@ -110,6 +118,19 @@ def _is_keyword(token: str) -> bool:
     return len(t) >= 6 and t not in STOPWORDS or any(ch.isdigit() for ch in t)
 
 
+def _proper_names(words: list[dict]) -> set[int]:
+    """Palavras com inicial maiúscula fora do começo de frase (nomes próprios), pelo id do dicionário."""
+    out, prev = set(), ""
+    for w in words:
+        t = w["text"].strip()
+        starts = not prev or prev.endswith((".", "!", "?", "…"))
+        core = t.strip("“”\"'(),.!?…:;")
+        if not starts and len(core) > 1 and core[0].isupper() and clean_token(core) not in STOPWORDS:
+            out.add(id(w))
+        prev = t
+    return out
+
+
 def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("{", "(").replace("}", ")")
 
@@ -133,7 +154,8 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int, height: int, p
         backcolor=hex_to_color(style.shadow_color, 96 if style.glow else 80), bold=False,
         outline=style.outline, shadow=style.shadow,
         alignment=Alignment.MIDDLE_CENTER if centered else Alignment.BOTTOM_CENTER,
-        marginl=int(width * 0.08), marginr=int(width * 0.08), marginv=0 if centered else margin_v, borderstyle=1,
+        marginl=int(width * style.side_margin), marginr=int(width * style.side_margin),
+        marginv=0 if centered else margin_v, borderstyle=1, italic=style.italic,
     )
     subs.styles["Caption"] = s
     if below:
@@ -143,9 +165,14 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int, height: int, p
 
     hl = ass_color(style.highlight)
     kw = ass_color(style.keyword_color) if style.keyword_color else None
-    for group in group_words(words, style.max_chars, style.max_words):
+    nc = ass_color(style.names_color) if style.names_color else None
+    names = _proper_names(words) if nc else set()
+    groups = group_words(words, style.max_chars, style.max_words)
+    for gi, group in enumerate(groups):
         tokens = [w["text"].upper() if style.uppercase else w["text"] for w in group]
         g_end = group[-1]["end"] + 0.12
+        if gi + 1 < len(groups):  # termina quando o próximo bloco começa (nunca dois blocos na tela)
+            g_end = min(g_end, groups[gi + 1][0]["start"])
         for i, w in enumerate(group):
             start = w["start"]
             end = group[i + 1]["start"] if i + 1 < len(group) else g_end
@@ -157,6 +184,8 @@ def build_ass(words: list[dict], style: CaptionStyle, width: int, height: int, p
                 if j == i and style.highlight_active:
                     anim = r"\t(0,90,\fscx112\fscy112)\t(90,180,\fscx100\fscy100)" if style.pop else ""
                     parts.append(f"{{\\c{hl}{anim}}}{tok}{{\\r}}")
+                elif nc and id(group[j]) in names:
+                    parts.append(f"{{\\c{nc}}}{tok}{{\\r}}")
                 elif kw and _is_keyword(group[j]["text"]):
                     parts.append(f"{{\\c{kw}}}{tok}{{\\r}}")
                 else:

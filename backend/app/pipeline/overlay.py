@@ -17,7 +17,8 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from .. import config
 
-STYLES = {"tweet", "caixa", "citacao", "nenhum"}
+STYLES = {"tweet", "caixa", "citacao", "faixa", "nenhum"}
+BAND_FRAC = 0.24  # "faixa": altura da faixa branca no topo; o vídeo fica abaixo dela
 ROTATION = ("tweet", "caixa", "citacao")  # estilo "variar": cada corte abre com um tema diferente
 
 
@@ -164,6 +165,31 @@ def quote_card(text: str, width: int, height: int, y: int) -> Image.Image:
     return canvas
 
 
+def band_height(height: int) -> int:
+    return int(height * BAND_FRAC) // 2 * 2
+
+
+def band_card(text: str, width: int, height: int) -> Image.Image:
+    """Faixa branca no topo com a chamada em caixa alta, preta e centralizada."""
+    canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    band = band_height(height)
+    d = ImageDraw.Draw(canvas)
+    d.rectangle((0, 0, width, band), fill=(255, 255, 255, 255))
+    margin = int(width * 0.08)
+    for size in (64, 58, 52, 46):                      # diminui a fonte até caber em 3 linhas
+        f = _font("Poppins-Bold.ttf", size)
+        lines = wrap(text.upper(), f, width - 2 * margin, 3)
+        if not lines[-1].endswith("…"):
+            break
+    line_h = int(size * 1.22)
+    ty = (band - line_h * len(lines)) // 2 + int(size * 0.05)
+    for line in lines:
+        w = f.getlength(line)
+        d.text(((width - w) / 2, ty), line, font=f, fill=(10, 10, 10))
+        ty += line_h
+    return canvas
+
+
 def card_text(style: str, card: dict) -> str | None:
     """Escolhe o texto de cada estilo a partir das partes geradas pelo metadata."""
     lead, quote, question = card.get("lead") or "", card.get("quote") or "", card.get("question") or ""
@@ -181,6 +207,8 @@ def card_text(style: str, card: dict) -> str | None:
         return card.get("topic_line") or None      # sem frase boa: o assunto, nunca uma frase solta
     if style == "citacao":
         return quote or question or None
+    if style == "faixa":
+        return card.get("headline") or card.get("topic_line") or None
     return None
 
 
@@ -204,6 +232,9 @@ def render_card(style: str, card: dict, out: Path, width: int, height: int, posi
 
         b = branding.current()
         img = tweet_card(text, b["name"], b["handle"], b["avatar"], width, height, y)
+    elif style == "faixa":
+        img = band_card(text, width, height)
+        position = "top"                              # a faixa é sempre no topo
     elif style == "caixa":
         img = box_card(text, width, height, y + 40)
     else:
