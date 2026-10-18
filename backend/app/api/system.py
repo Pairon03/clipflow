@@ -228,3 +228,42 @@ def title_preview(style: str = "tweet"):
     from fastapi.responses import Response
 
     return Response(buf.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+# ------------------------------------------------------------------ filtros de cor
+@router.get("/filters")
+def list_filters():
+    from ..pipeline import color
+
+    return [{"key": k, "name": name} for k, (name, _) in color.FILTERS.items()]
+
+
+@router.get("/filters/preview")
+def filter_preview(name: str = "nenhum", project_id: str | None = None):
+    """Quadro do vídeo do projeto (ou do projeto mais recente) com o filtro aplicado."""
+    from ..pipeline import color
+    from .common import get_project_or_404
+
+    if name not in color.FILTERS:
+        raise HTTPException(422, "Filtro inválido")
+    if project_id:
+        projects = [get_project_or_404(project_id)]
+    else:
+        projects = db.fetch_all("SELECT * FROM projects WHERE source_path IS NOT NULL "
+                                "ORDER BY created_at DESC LIMIT 10")
+    for p in projects:
+        try:
+            src = storage.ensure_inside_root(p["source_path"]) if p.get("source_path") else None
+        except storage.UnsafePathError:
+            continue
+        if not src or not src.is_file():
+            continue
+        clip = db.fetch_one("SELECT start FROM clips WHERE project_id = ? ORDER BY selected DESC, start LIMIT 1",
+                            (p["id"],))
+        at = (clip["start"] + 2.0) if clip else (p.get("source_duration") or 10) * 0.3
+        try:
+            out = color.preview(src, at, name, storage.root() / "tmp" / "filter_preview" / p["id"])
+        except Exception:  # noqa: BLE001 — prévia é opcional; sem quadro, a interface mostra só o nome
+            continue
+        return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+    raise HTTPException(404, "Nenhum vídeo disponível para a prévia")

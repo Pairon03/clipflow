@@ -94,6 +94,19 @@ def test_full_pipeline_upload_to_shorts(client, sample_two):
     assert client.get(f"/api/projects/{pid}/transcript.srt").status_code == 200
 
 
+def test_filter_preview_uses_project_frame(client):
+    from PIL import Image
+
+    pid = db.fetch_one("SELECT id FROM projects WHERE source_path IS NOT NULL ORDER BY created_at")["id"]
+    for name in ("nenhum", "pb"):
+        r = client.get(f"/api/filters/preview?name={name}&project_id={pid}")
+        assert r.status_code == 200 and r.headers["content-type"] == "image/jpeg"
+        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+        assert img.size == (270, 480)
+    r, g, b = img.resize((1, 1)).getpixel((0, 0))
+    assert abs(r - g) <= 2 and abs(g - b) <= 2  # preto e branco
+
+
 def test_caption_sync_matches_speech(client, sample_two, tmp_path):
     """A primeira palavra de cada bloco de legenda deve coincidir com fala no áudio do vídeo final."""
     clips = db.fetch_all("SELECT * FROM clips WHERE status = 'done' ORDER BY rowid")

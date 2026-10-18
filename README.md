@@ -73,8 +73,13 @@ cp config.example.toml config.toml
   - **Caixa**: caixa branca com barra roxa ("Fulano explica: …", "Fulano responde: pergunta").
   - **Citação**: ícone verde de aspas e a frase real do convidado em caixa alta.
   - **Variar**: cada corte do projeto abre com um estilo diferente (tweet → caixa → citação…). **Nenhum** desliga.
-  - Duração: o vídeo inteiro ou só os primeiros ~4 s. No layout dividido, o título fica na divisão entre as duas
-    pessoas e a legenda desce para baixo dele.
+  - Duração: o vídeo inteiro ou só os primeiros ~4 s. Posição: **topo** ou **meio da tela** (logo acima da
+    legenda). No layout dividido, o título fica na divisão entre as duas pessoas e a legenda desce para baixo dele.
+- **Filtro de cor:** Vivo, Quente, Frio, Cinema, Vintage ou Preto e branco, aplicado só ao vídeo (título e legenda
+  ficam com as cores originais). A escolha mostra a prévia num quadro do seu próprio vídeo.
+  > Filtro é identidade visual, não "disfarce": ele **não** evita reivindicações de Content ID (o áudio e a
+  > imagem continuam reconhecíveis) e não torna o corte conteúdo original. O que conta é a autorização do titular
+  > e a sua contribuição editorial (seleção, cortes, títulos, legendas).
 - **Descrições chamativas:** gancho com emoji, a frase mais forte da fala entre aspas, uma chamada para comentar
   ou seguir, o crédito do episódio e hashtags (inclusive do convidado e do programa, quando o título do vídeo
   segue o formato "CONVIDADO - Programa #123").
@@ -194,10 +199,11 @@ clipflow-studio/
 │   │   │   ├── concat_bridge.py  ponte MCP com o editor Concat (opcional)
 │   │   │   ├── enhance.py     zoom de ênfase, gancho de abertura e texto de gancho (Concat)
 │   │   │   ├── overlay.py     títulos sobrepostos (tweet, caixa, citação)
+│   │   │   ├── color.py       filtros de cor (gradação)
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               121 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               125 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -221,7 +227,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 121 testes (~6 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 125 testes (~6 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

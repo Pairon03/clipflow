@@ -71,9 +71,13 @@ def test_render_card_draws_white_card(style, tmp_path):
         assert overlay.render_card(style, {}, tmp_path / "e.png", 1080, 1920) is None
 
 
-def test_render_card_middle_position(tmp_path):
-    out = overlay.render_card("caixa", CARD, tmp_path / "m.png", 1080, 1920, position="middle")
-    assert Image.open(out).getchannel("A").getbbox()[1] > 1920 * 0.4
+@pytest.mark.parametrize("position,mid", [("center", 0.45), ("split", 0.5)])
+def test_render_card_centered_positions(position, mid, tmp_path):
+    for style in ("tweet", "caixa", "citacao"):
+        out = overlay.render_card(style, CARD, tmp_path / f"{style}.png", 1080, 1920, position=position)
+        top, bottom = Image.open(out).getchannel("A").getbbox()[1::2]
+        assert abs((top + bottom) / 2 - 1920 * mid) <= 2      # centralizado na altura pedida
+        assert bottom < 1920 * 0.7                             # acima da legenda (30% da base)
 
 
 def test_long_text_is_limited_with_ellipsis():
@@ -145,3 +149,26 @@ def test_captions_move_below_card_in_split(tmp_path):
     assert subs.styles["CaptionLow"].marginv == 1124
     assert {e.style for e in subs if e.start < 2000} == {"CaptionLow"}
     assert {e.style for e in subs if e.start >= 3000} == {"Caption"}
+
+
+def test_color_filters_validated_and_in_filtergraph():
+    from app.pipeline import color, render
+
+    assert validate_options({})["color_filter"] == "nenhum"
+    assert validate_options({"color_filter": "cinema"})["color_filter"] == "cinema"
+    assert validate_options({})["title_position"] == "topo"
+    assert validate_options({"title_position": "meio"})["title_position"] == "meio"
+    for bad in ({"color_filter": "x;rm"}, {"title_position": "baixo"}):
+        with pytest.raises(Exception):
+            validate_options(bad)
+    plan = {"layout": "center", "keyframes": [(0, 0.5)]}
+    g = render.build_filtergraph([(0, 5)], plan, 1920, 1080, 30, None, 5, color_filter=color.chain("cinema"))
+    assert f"[vgr]{color.chain('cinema')}[vlay]" in g
+    assert "[vgr]" not in render.build_filtergraph([(0, 5)], plan, 1920, 1080, 30, None, 5)
+    assert color.chain("nenhum") is None and color.chain("??") is None
+
+
+def test_filter_preview_endpoint(client, tmp_path):
+    assert client.get("/api/filters/preview?name=nao-existe").status_code == 422
+    assert [f["key"] for f in client.get("/api/filters").json()][0] == "nenhum"
+    assert client.get("/api/filters/preview?name=pb&project_id=../../x").status_code == 404

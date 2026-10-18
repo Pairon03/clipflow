@@ -182,15 +182,21 @@ def card_text(style: str, card: dict) -> str | None:
     return None
 
 
+POSITIONS = {"top", "center", "split"}
+
+
 def render_card(style: str, card: dict, out: Path, width: int, height: int, position: str = "top") -> Path | None:
-    """Gera um PNG transparente do tamanho do vídeo com o título desenhado. None se não houver texto."""
+    """Gera um PNG transparente do tamanho do vídeo com o título desenhado. None se não houver texto.
+
+    `position`: "top" (abaixo da interface do TikTok/Shorts), "center" (meio da tela, um pouco acima
+    da legenda) ou "split" (na divisão do layout dividido).
+    """
     if style not in STYLES or style == "nenhum":
         return None
     text = clean_text(card_text(style, card) or "")
     if not text:
         return None
-    # topo: abaixo da área da interface do TikTok/Shorts; "middle": na divisão do layout dividido
-    y = int(height * 0.085) if position == "top" else int(height * 0.42)
+    y = int(height * 0.085)
     if style == "tweet":
         from . import branding
 
@@ -200,5 +206,13 @@ def render_card(style: str, card: dict, out: Path, width: int, height: int, posi
         img = box_card(text, width, height, y + 40)
     else:
         img = quote_card(text, width, height, y + 20)
+    if position in ("center", "split"):
+        bbox = img.getchannel("A").getbbox()
+        if bbox:
+            mid = height * (0.45 if position == "center" else 0.5)
+            shift = int(mid - (bbox[1] + bbox[3]) / 2)
+            moved = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            moved.paste(img, (0, shift))
+            img = moved
     img.save(out, "PNG", optimize=True)
     return out

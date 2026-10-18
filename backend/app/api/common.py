@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 from .. import config, db, storage
+from ..pipeline.color import FILTERS as _COLOR_FILTERS
 from ..security import RIGHTS_BASES
 
 STYLES = {
@@ -19,6 +20,7 @@ CAPTION_STYLES = {"classic", "neon", "minimal", "impact"}
 LAYOUTS = {"auto", "follow", "speaker", "split", "fit", "center", "manual"}
 TITLE_STYLES = {"tweet", "caixa", "citacao", "variar", "nenhum"}
 PACES = {"natural", "tiktok"}  # tiktok: corta respirações e silêncios entre falas
+COLOR_FILTERS = set(_COLOR_FILTERS)  # filtros de cor (gradação) do vídeo
 ENGINES = {"ffmpeg", "concat"}  # concat: zoom de ênfase, texto de gancho e exportação pelo Concat
 MAX_CLIP_SECONDS = 180  # limite atual do YouTube Shorts
 
@@ -91,6 +93,12 @@ def validate_options(raw: dict | None) -> dict:
     title_duration = raw.get("title_duration") or "inteiro"
     if title_duration not in {"inteiro", "inicio"}:
         raise HTTPException(422, "Duração do título inválida")
+    title_position = raw.get("title_position") or "topo"
+    if title_position not in {"topo", "meio"}:
+        raise HTTPException(422, "Posição do título inválida")
+    color_filter = raw.get("color_filter") or "nenhum"
+    if color_filter not in COLOR_FILTERS:
+        raise HTTPException(422, "Filtro de cor inválido")
     engine = raw.get("engine") or "ffmpeg"
     if engine not in ENGINES:
         raise HTTPException(422, "Motor de edição inválido")
@@ -126,7 +134,9 @@ def validate_options(raw: dict | None) -> dict:
         "speed": speed,
         "title_style": title_style,
         "title_duration": title_duration,
+        "title_position": title_position,
         "cold_open": bool(raw.get("cold_open", True)),
+        "color_filter": color_filter,
     }
 
 

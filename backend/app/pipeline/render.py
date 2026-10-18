@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import enhance, ffmpeg, framing, overlay, subtitles
+from . import color, enhance, ffmpeg, framing, overlay, subtitles
 from .context import JobContext
 from .errors import PipelineError
 
@@ -151,13 +151,14 @@ def _select_expr(intervals: list[tuple[float, float]], fps: float) -> str:
 def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: int, src_h: int, fps: float,
                       ass_path: Path | None, out_duration: float, speed: float = 1.0,
                       hook_len: float | None = None, overlay_input: int | None = None,
-                      overlay_until: float | None = None) -> str:
+                      overlay_until: float | None = None, color_filter: str | None = None) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
     para cada corte: assim a memória não cresce com o número de cortes (ritmo TikTok).
     O áudio é fatiado em blocos do tamanho de um quadro, então os dois cortam no mesmo ponto.
     `hook_len`: gancho de abertura, lido da 2ª entrada ([1:v]/[1:a]) e colocado antes de tudo.
+    `color_filter`: cadeia de filtros de cor aplicada ao vídeo antes do título e da legenda.
     """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
@@ -174,7 +175,9 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
         parts.append("[vh][ah][vm][am]concat=n=2:v=1:a=1[vc][ac]")
     speed_v = f"setpts=PTS/{speed:g}," if speed != 1.0 else ""
     parts.append(f"[vc]{speed_v}fps={fps:g}[vf]")
-    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vlay"))
+    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vgr" if color_filter else "vlay"))
+    if color_filter:
+        parts.append(f"[vgr]{color_filter}[vlay]")
     if overlay_input is not None:
         # título (PNG transparente do tamanho do vídeo) com entrada suave; some no fim se for "só no início"
         fade = "fade=t=in:st=0:d=0.3:alpha=1"
@@ -290,7 +293,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     if title_style != "nenhum" and options.get("title_card"):
         # no layout dividido o título vai para a divisão entre as duas pessoas
         card_png = overlay.render_card(title_style, options["title_card"], work_dir / f"{clip_id}{variant}.title.png",
-                                       out_w, out_h, position="middle" if split else "top")
+                                       out_w, out_h, position="split" if split else
+                                       ("center" if options.get("title_position") == "meio" else "top"))
     overlay_until = None
     if card_png and options.get("title_duration") == "inicio":
         overlay_until = min(TITLE_START_S, out_duration)
@@ -314,7 +318,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     overlay_idx = (2 if hook else 1) if card_png else None
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
                               hook_len=(hook[1] - hook[0]) if hook else None,
-                              overlay_input=overlay_idx, overlay_until=overlay_until)
+                              overlay_input=overlay_idx, overlay_until=overlay_until,
+                              color_filter=color.chain(options.get("color_filter")))
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
@@ -356,5 +361,6 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "speed": speed, "pace": options.get("pace", "natural"),
                         "cold_open": [hook[0], hook[1]] if hook else None,
                         "title_style": title_style if card_png else None,
+                        "color_filter": options.get("color_filter") if color.chain(options.get("color_filter")) else None,
                         "fps": fps, "tracks": plan.get("tracks", [])},
     }

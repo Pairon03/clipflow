@@ -6,6 +6,7 @@ import { api, uploadFile, fileUrl } from '../api'
 import { fmtBytes, fmtDuration, toast, LAYOUT_LABELS, CAPTION_LABELS } from '../utils'
 import ProgressBar from '../components/ProgressBar.vue'
 import TitleStylePicker from '../components/TitleStylePicker.vue'
+import FilterPicker from '../components/FilterPicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -94,7 +95,9 @@ const form = reactive({
   speed: 1.0,
   title_style: 'tweet',
   title_duration: 'inteiro',
+  title_position: 'meio',
   cold_open: true,
+  color_filter: 'nenhum',
   rightsConfirmed: false,
   rightsBasis: 'own',
   rightsNote: '',
@@ -132,7 +135,7 @@ async function submit(force = false) {
         captions: form.captions, trim_silence: form.trim_silence, review: form.review,
         engine: form.engine, hook: form.hook, zoom: form.zoom,
         pace: form.pace, speed: form.speed, title_style: form.title_style, title_duration: form.title_duration,
-        cold_open: form.cold_open,
+        cold_open: form.cold_open, title_position: form.title_position, color_filter: form.color_filter,
       },
       force,
     }
@@ -361,6 +364,16 @@ onMounted(async () => {
               <button class="chip py-1.5" :class="{ 'chip-active': form.title_duration === 'inteiro' }" @click="form.title_duration = 'inteiro'">Vídeo inteiro</button>
               <button class="chip py-1.5" :class="{ 'chip-active': form.title_duration === 'inicio' }" @click="form.title_duration = 'inicio'">Só no início</button>
             </div>
+            <div v-if="form.title_style !== 'nenhum'" class="mt-2 flex flex-wrap items-center gap-2">
+              <span class="text-xs text-ink-400">Posição:</span>
+              <button class="chip py-1.5" :class="{ 'chip-active': form.title_position === 'topo' }" @click="form.title_position = 'topo'">Topo</button>
+              <button class="chip py-1.5" :class="{ 'chip-active': form.title_position === 'meio' }" @click="form.title_position = 'meio'">Meio da tela</button>
+            </div>
+          </div>
+
+          <div>
+            <span class="label">Filtro de cor</span>
+            <FilterPicker v-model="form.color_filter" />
           </div>
 
           <div>
