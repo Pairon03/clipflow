@@ -40,6 +40,10 @@ pushd frontend
 call npm install || (popd & echo [ERRO] npm install falhou & pause & exit /b 1)
 call npm run build || (popd & echo [ERRO] build da interface falhou & pause & exit /b 1)
 popd
+rem marca dependencias e interface como atualizadas (usado pelo start-windows.bat)
+pushd backend
+python -c "from app import update_check as u; u.STAMP.write_text(u._hash(u.REQUIREMENTS)); u.mark_frontend_built()"
+popd
 
 if not exist config.toml copy config.example.toml config.toml >nul
 echo.

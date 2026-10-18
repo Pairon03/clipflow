@@ -36,6 +36,14 @@ Dê dois cliques em **`start-windows.bat`**. O navegador abre em <http://127.0.0
 Na **primeira transcrição**, o modelo Whisper escolhido é baixado automaticamente do Hugging Face
 (`small` ≈ 480 MB). Depois disso funciona offline.
 
+### Atualizar para uma versão nova
+
+1. Feche a janela do ClipFlow.
+2. Baixe o ZIP novo do GitHub e copie as pastas `backend` e `frontend` por cima das antigas (não apague a pasta
+   `ClipFlowStudio`: nela ficam seus vídeos e projetos).
+3. Abra com `start-windows.bat`. Ele percebe a atualização sozinho: instala dependências novas e recompila a
+   interface antes de abrir (na primeira vez depois de atualizar leva um pouco mais).
+
 ### Linux / macOS
 
 ```bash

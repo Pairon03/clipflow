@@ -73,3 +73,23 @@ def test_path_sanitization(tmp_path):
 def test_safe_filename():
     assert safe_filename("Título: “ótimo” / teste?") == "Titulo_otimo_teste"
     assert safe_filename("../../") == "arquivo"
+
+
+def test_update_check_detects_changed_frontend(tmp_path):
+    from app import update_check as u
+
+    fe = tmp_path / "frontend"
+    (fe / "src").mkdir(parents=True)
+    (fe / "src" / "App.vue").write_text("v1")
+    (fe / "package.json").write_text("{}")
+    assert u.frontend_outdated(fe)                 # nunca compilado
+    (fe / "dist").mkdir()
+    (fe / "dist" / "index.html").write_text("<html>")
+    assert u.frontend_outdated(fe)                 # compilado sem marca (versão antiga do setup)
+    u.mark_frontend_built(fe)
+    assert not u.frontend_outdated(fe)
+    (fe / "src" / "App.vue").write_text("v2")      # atualização copiada por cima
+    assert u.frontend_outdated(fe)
+    u.mark_frontend_built(fe)
+    (fe / "src" / "Novo.vue").write_text("x")      # arquivo novo
+    assert u.frontend_outdated(fe)
