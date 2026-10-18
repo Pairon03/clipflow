@@ -91,7 +91,9 @@ def test_description_is_catchy_not_transcript():
     assert not d.startswith(text[:40])  # não começa com a transcrição
     first = d.split("\n")[0]
     assert any(ord(ch) > 0x2000 for ch in first)  # gancho com emoji
-    assert any(cta in d for cta in ("Comenta", "Marca", "Segue", "Salva", "comenta"))
+    lines = d.split("\n\n")
+    assert lines[-3].endswith(("👇", "📌", "🔥", "❤️", "👀"))  # chamada antes do crédito e das hashtags
+    assert d.startswith("🎯 No Podpah, Craque Neto responde: “Qual foi o maior erro da sua carreira?”")
     assert "#craqueneto" in m["hashtags"] and "#podpah" in m["hashtags"] and "#cortes" in m["hashtags"]
     assert m["titles"][1].startswith("Craque Neto: “")
     assert metadata.parse_source("CRAQUE NETO - Podpah #1093") == ("Craque Neto", "Podpah")

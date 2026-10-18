@@ -93,21 +93,35 @@ def rerank(candidates: list[dict]) -> dict[int, dict] | None:
 
 
 METADATA_SYSTEM = (
-    "Você é social media de cortes de podcast e cria títulos e descrições para TikTok, Reels e YouTube Shorts "
-    "em português do Brasil. A descrição deve ser chamativa: começa com um gancho curto com 1 emoji, depois "
-    "uma frase que gere curiosidade e termina com uma chamada para comentar ou seguir. NÃO transcreva a fala. "
-    "Regras obrigatórias: use apenas informações presentes na transcrição; não invente declarações nem "
-    "atribua falas que não existem; nada de clickbait enganoso; títulos com no máximo 70 caracteres. "
-    "Responda em JSON."
+    "Você é social media de uma página de cortes de podcast no TikTok, Reels e YouTube Shorts, em português do "
+    "Brasil. Seu texto precisa ser ESPECÍFICO do trecho (cite o assunto concreto, nomes, números) e nunca "
+    "genérico como 'olha esse trecho'. NÃO transcreva a fala inteira. "
+    "Regras obrigatórias: use apenas o que está na transcrição; não invente fatos nem falas; nada de clickbait "
+    "enganoso; títulos com no máximo 70 caracteres; a 'frase' da caixa deve ser COPIADA da transcrição "
+    "(pode apenas tirar muletas como né, tipo, aí, cara) e precisa fazer sentido sozinha. "
+    "Exemplo de resposta para um trecho em que Craque Neto critica o Neymar no Podpah: "
+    '{"titulos": ["Craque Neto: Neymar desperdiçou a carreira", "O que faltou para o Neymar, segundo Craque Neto", '
+    '"Talento sem disciplina não vale nada"], '
+    '"gancho": "🔥 Craque Neto não aliviou pro Neymar", '
+    '"contexto": "No Podpah, ele diz que o talento do Neymar era maior que o de Messi e Cristiano, mas faltou disciplina.", '
+    '"chamada": "Você concorda com o Craque Neto? Comenta 👇", '
+    '"caixa": {"chamada": "Craque Neto sobre o Neymar:", "frase": "Talento sem disciplina não vale nada"}, '
+    '"manchete": "Craque Neto diz que Neymar trocou a carreira pela balada", '
+    '"hashtags": ["#neymar", "#futebol", "#craqueneto"], "palavras_chave": ["neymar", "disciplina"]}. '
+    "Responda somente em JSON."
 )
 
 
 def metadata(transcript_text: str, source_title: str) -> dict | None:
     prompt = (
         f"Vídeo de origem: {source_title}\nTranscrição do corte:\n\"\"\"{transcript_text[:3000]}\"\"\"\n\n"
-        'Formato: {"titulos": ["", "", ""], "manchete": "resumo do trecho em 3ª pessoa, até 100 caracteres", '
-        '"descricao": "gancho + curiosidade + chamada, até 3 linhas", '
-        '"hashtags": ["#..."], "palavras_chave": ["..."], "texto_curto": "1 frase para publicação"}'
+        'Formato: {"titulos": ["", "", ""], "gancho": "1ª linha, com 1 emoji, até 90 caracteres", '
+        '"contexto": "1 frase: quem fala e sobre o quê, com o detalhe concreto do trecho, até 160 caracteres", '
+        '"chamada": "pergunta para comentar ligada ao assunto, até 80 caracteres", '
+        '"caixa": {"chamada": "até 40 caracteres, terminando com dois-pontos", '
+        '"frase": "frase copiada da transcrição, até 80 caracteres"}, '
+        '"manchete": "resumo do trecho em 3ª pessoa, até 100 caracteres", '
+        '"hashtags": ["#..."], "palavras_chave": ["..."]}'
     )
     data = generate_json(prompt, METADATA_SYSTEM)
     return data if isinstance(data, dict) else None

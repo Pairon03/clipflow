@@ -176,7 +176,9 @@ def card_text(style: str, card: dict) -> str | None:
         if question:
             head = f"{guest} responde:" if guest else "Pergunta:"
             return f"{head}\n{question}"
-        return f"{lead}\n{quote}" if quote else (lead or None)
+        if quote:
+            return f"{lead}\n{quote}"
+        return card.get("topic_line") or None      # sem frase boa: o assunto, nunca uma frase solta
     if style == "citacao":
         return quote or question or None
     return None

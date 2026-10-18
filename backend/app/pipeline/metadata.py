@@ -8,108 +8,108 @@ from __future__ import annotations
 
 import re
 
-from . import llm
+from . import llm, phrases
 from .textutil import hashtag, keywords, norm, sentence_case, truncate_words
 
 MAX_TITLE = 70
 
 
-def _sentences(text: str) -> list[str]:
-    parts = re.split(r"(?<=[.!?…])\s+", text.strip())
-    return [p.strip() for p in parts if len(p.strip()) > 3]
-
-
 _SHOW_RE = re.compile(r"(#\s*\d+|\bep(is[oó]dio)?\.?\s*\d+|\bpodcast\b|\bpodpah\b|\bflow\b|\bcast\b)", re.I)
 
 
+_NAME_CONNECTORS = {"de", "da", "do", "dos", "das", "e"}
+
+
+def _looks_like_name(part: str) -> bool:
+    words = part.split()
+    if not 1 <= len(words) <= 4 or len(part) > 40 or _SHOW_RE.search(part):
+        return False
+    if part.isupper():
+        return True
+    return all(w[:1].isupper() or w.lower() in _NAME_CONNECTORS for w in words)
+
+
 def parse_source(source_title: str) -> tuple[str | None, str | None]:
-    """Separa convidado e programa de títulos como 'CRAQUE NETO - Podpah #1093'."""
+    """Separa convidado e programa de títulos como 'CRAQUE NETO - Podpah #1093'.
+
+    O convidado só é aceito se parecer um nome (palavras com inicial maiúscula); um título como
+    'Como sair das dívidas | Primo Rico' não vira "convidado: Como sair das dívidas".
+    """
     if not source_title:
         return None, None
     parts = [p.strip() for p in re.split(r"\s+[-–|:]\s+", source_title) if p.strip()]
     if len(parts) < 2:
         return None, (source_title if _SHOW_RE.search(source_title) else None)
-    show = next((p for p in parts if _SHOW_RE.search(p)), parts[-1])
-    guest = next((p for p in parts if p is not show), None)
-    if guest and (len(guest) > 40 or len(guest.split()) > 5):
-        guest = None  # parece frase, não nome
+    show = next((p for p in parts if _SHOW_RE.search(p)), None)
+    guest = next((p for p in parts if p is not show and _looks_like_name(p)), None)
     if guest and guest.isupper():
         guest = guest.title()
-    show_name = re.sub(r"\s*(#\s*\d+|ep(is[oó]dio)?\.?\s*\d+)\s*$", "", show, flags=re.I).strip() or show
+    show_name = None
+    if show:
+        show_name = re.sub(r"\s*(#\s*\d+|ep(is[oó]dio)?\.?\s*\d+)\s*$", "", show, flags=re.I).strip() or show
     return guest, show_name
 
 
-# ganchos por tipo de trecho; {quem} = convidado (ou "ele"), {tema} = palavra-chave principal
+# gancho (1ª linha): específico do trecho, sem afirmar nada que não esteja na fala
 _HOOKS = {
-    "História": ["😳 {quem} contou essa história sobre {tema}…", "📖 Essa história sobre {tema} é de outro nível",
-                 "😮 Olha o que aconteceu com {quem}…"],
-    "Opinião": ["🔥 {quem} deu a real sobre {tema}", "🗣️ A opinião sincera sobre {tema}",
-                "💥 {quem} não segurou a língua sobre {tema}"],
-    "Pergunta e resposta": ["🎯 Perguntaram sobre {tema} e a resposta foi direta", "❓ Você sabe a resposta? Olha o que {quem} disse",
-                            "🎯 A pergunta foi sobre {tema}… e a resposta?"],
-    "Educativo": ["💡 Presta atenção nessa explicação sobre {tema}", "🧠 Isso sobre {tema} muda a forma de pensar",
-                  "📌 Salva esse: {tema} explicado em segundos"],
-    "Emocionante": ["🥹 Que momento… {quem} falando sobre {tema}", "❤️ Esse trecho sobre {tema} tocou fundo",
-                    "🥹 Não tem como não sentir esse momento"],
-    "Curiosidade": ["🤯 Você sabia disso sobre {tema}?", "👀 Pouca gente presta atenção nisso sobre {tema}",
-                    "🤯 Essa sobre {tema} eu não sabia"],
-    "Frase de impacto": ["⚡ {quem} mandou essa sobre {tema}", "💣 Essa frase sobre {tema} diz tudo",
-                         "⚡ Escuta até o final"],
+    "História": ["📖 {quem} contou como foi {tema_de}", "😳 A história {de_quem} {tema_sobre} é de outro nível"],
+    "Opinião": ["🔥 {quem} deu a opinião sincera {tema_sobre}", "🗣️ {quem} não aliviou {tema_sobre}"],
+    "Pergunta e resposta": ["🎯 A resposta {de_quem} {tema_sobre} foi direta", "🎯 Perguntaram {tema_sobre}…"],
+    "Educativo": ["💡 {quem} explicou {tema_sobre} em menos de um minuto", "📌 Anota essa {tema_sobre}"],
+    "Emocionante": ["🥹 {quem} se abriu {tema_sobre}", "❤️ Que momento {de_quem} {tema_sobre}"],
+    "Curiosidade": ["🤯 Você sabia disso {tema_sobre}?", "👀 Pouca gente conhece esse lado {tema_sobre}"],
+    "Frase de impacto": ["⚡ {quem} resumiu tudo {tema_sobre}", "💥 Essa {de_quem} {tema_sobre} diz muito"],
 }
-_DEFAULT_HOOKS = ["🎙️ {quem} falando sobre {tema}", "👀 Olha esse trecho sobre {tema}", "🔥 Esse corte vale o play"]
-_CTAS = ["Comenta aqui: você concorda? 👇", "Marca aquele amigo que precisa ver isso 👀",
-         "Segue pra ver mais cortes como esse 🔥", "Salva pra assistir de novo depois 📌",
-         "E você, o que faria? Comenta 👇"]
+_DEFAULT_HOOKS = ["🎙️ {quem} falando {tema_sobre}", "👀 Olha esse trecho {tema_sobre}"]
+# chamada final ligada ao tipo de trecho
+_CTAS = {
+    "Opinião": ["Você concorda {com_quem}? Comenta 👇", "Tá certo ou tá errado? Opina aqui 👇"],
+    "História": ["Já passou por algo parecido? Conta aqui 👇", "Segue pra ver a continuação de outros cortes 🔥"],
+    "Pergunta e resposta": ["E você, o que responderia? 👇", "Concorda com a resposta? Comenta 👇"],
+    "Educativo": ["Salva pra lembrar depois 📌", "Manda pra quem precisa ouvir isso 👀"],
+    "Emocionante": ["Marca alguém que precisa ouvir isso ❤️", "Comenta o que você sentiu 👇"],
+    "Curiosidade": ["Você já sabia? Comenta 👇", "Manda pra alguém que não sabia disso 👀"],
+    "Frase de impacto": ["Concorda? Comenta 👇", "Salva essa frase 📌"],
+}
+_DEFAULT_CTAS = ["Comenta o que você achou 👇", "Segue pra ver mais cortes como esse 🔥"]
 
 
 def _pick(options: list[str], seed: str, salt: int = 0) -> str:
     return options[(sum(map(ord, seed)) + salt) % len(options)]
 
 
-def _best_quote(sents: list[str], kws: list[str], max_chars: int = 110) -> str | None:
-    def strength(s: str) -> float:
-        ns = norm(s)
-        k = sum(1 for kw in kws[:5] if norm(kw) in ns)
-        punch = 0.6 if s.endswith(("!", "?")) else 0.0
-        size = 1.0 if 25 <= len(s) <= max_chars else 0.0
-        return k + punch + size
-    good = [s for s in sents if len(s) <= max_chars]
-    return max(good, key=strength) if good else None
+def _fmt(template: str, guest: str | None, topic: str | None) -> str:
+    quem = guest or "Ele"
+    out = template.format(
+        quem=quem, de_quem=f"de {guest}" if guest else "dele",
+        com_quem=f"com {guest}" if guest else "com ele",
+        tema_sobre=f"sobre {topic}" if topic else "", tema_de=topic or "tudo")
+    return re.sub(r"\s{2,}", " ", out).replace(" …", "…").replace(" ?", "?").strip()
 
 
 def heuristic(text: str, source_title: str, category: str) -> dict:
-    sents = _sentences(text)
     kws = keywords(text, top=8)
     guest, show = parse_source(source_title)
+    tema = phrases.topic(text, exclude=(guest, show), source_title=source_title)
+    topic_words = kws[:6] + ([tema] if tema else [])
+    quote = phrases.best_quote(text, topic_words, max_chars=110)
+    short_quote = phrases.best_quote(text, topic_words, max_chars=70)
+    question = phrases.best_question(text, max_chars=MAX_TITLE + 20)
+
     titles: list[str] = []
-
-    questions = [s for s in sents if s.endswith("?") and 15 <= len(s) <= MAX_TITLE + 20]
-    if questions:
-        titles.append(truncate_words(sentence_case(questions[0]), MAX_TITLE))
-
-    # frase mais "forte": curta o bastante e com palavras-chave
-    def strength(s: str) -> float:
-        ns = norm(s)
-        k = sum(1 for kw in kws[:5] if norm(kw) in ns)
-        size = 1.0 if 25 <= len(s) <= MAX_TITLE else 0.5
-        return k + size
-    affirm = sorted([s for s in sents if not s.endswith("?")], key=strength, reverse=True)
-    if affirm:
-        quote = truncate_words(affirm[0].rstrip("."), MAX_TITLE - 2 - (len(guest) + 2 if guest else 0))
-        titles.append(f"{guest}: “{quote}”" if guest else f"“{quote}”")
-
-    if kws:
-        topic = sentence_case(kws[0])
+    if question:
+        titles.append(truncate_words(question, MAX_TITLE))
+    if short_quote:
+        q = truncate_words(short_quote.rstrip("."), MAX_TITLE - 2 - (len(guest) + 2 if guest else 0))
+        titles.append(f"{guest}: “{q}”" if guest else f"“{q}”")
+    if tema:
         label = {
-            "História": "a história por trás",
-            "Opinião": "uma opinião sincera",
-            "Educativo": "o que você precisa saber",
-            "Curiosidade": "uma curiosidade",
-            "Emocionante": "um momento marcante",
-            "Pergunta e resposta": "a resposta direta",
+            "História": "a história completa", "Opinião": "a opinião sem filtro",
+            "Educativo": "o que você precisa saber", "Curiosidade": "o que pouca gente sabe",
+            "Emocionante": "um momento marcante", "Pergunta e resposta": "a resposta direta",
         }.get(category, "o trecho que resume tudo")
-        titles.append(truncate_words(f"{topic}: {label}", MAX_TITLE))
-
+        who = f"{guest} sobre {tema}" if guest else sentence_case(tema)
+        titles.append(truncate_words(f"{who}: {label}", MAX_TITLE))
     seen, uniq = set(), []
     for t in titles:
         if t and norm(t) not in seen:
@@ -120,25 +120,42 @@ def heuristic(text: str, source_title: str, category: str) -> dict:
     for name in (guest, show):
         if name:
             tags.append(hashtag(name.replace(" ", "")))
-    tags += [h for h in (hashtag(k) for k in kws[:4]) if h and len(h) > 3]
+    if tema:
+        tags.append(hashtag(tema.replace(" ", "")))
+    tags += [h for h in (hashtag(k) for k in kws[:6] if phrases.hashtag_ok(k)) if h and len(h) > 3]
     tags = list(dict.fromkeys(t for t in tags if t))[:8]
 
-    # descrição estilo TikTok: gancho + frase forte + chamada + crédito + hashtags
-    tema = kws[0] if kws else "isso"
-    quem = guest or "ele"
-    hook = _pick(_HOOKS.get(category, _DEFAULT_HOOKS), text).format(quem=quem, tema=tema)
-    if not guest and "{quem}" in _pick(_HOOKS.get(category, _DEFAULT_HOOKS), text):
-        hook = _pick(_DEFAULT_HOOKS[1:], text).format(quem=quem, tema=tema)
+    # descrição construída: gancho → contexto → frase real → chamada → crédito → hashtags
+    where = f"No {show}, " if show else ""
+    who = guest or "ele"
+    context = ""
+    if question:
+        hook = f"🎯 {(where + who)[:1].upper() + (where + who)[1:]} responde: “{question}”"   # pergunta → resposta
+    elif short_quote and phrases.score(short_quote, topic_words) >= 2.0:
+        hook = f"“{short_quote.rstrip('.')}” 😳"          # frase muito forte vira o próprio gancho
+        if tema and (guest or show):
+            context = f"{where}{who} fala sobre {tema}."
+    else:
+        hook = _fmt(_pick(_HOOKS.get(category, _DEFAULT_HOOKS), text), guest, tema)
+        if show and guest:
+            context = f"Trecho do {show}."
     lines = [hook]
-    quote = _best_quote(sents, kws)
-    if quote:
+    if context:
+        lines.append(context[:1].upper() + context[1:])
+    if quote and quote.rstrip(".") not in hook:
         lines.append(f"“{quote.rstrip('.')}”")
-    lines.append(_pick(_CTAS, text, salt=7))
+    elif quote:  # a melhor frase já virou o gancho: entra a segunda melhor, se for boa
+        second = phrases.best_quote(text, topic_words, max_chars=110, min_score=1.5, exclude=(quote,))
+        if second:
+            lines.append(f"“{second.rstrip('.')}”")
+    cta = _fmt(_pick(_CTAS.get(category, _DEFAULT_CTAS), text, salt=7), guest, tema)
+    lines.append(cta)
     if source_title:
         lines.append(f"🎙️ {source_title}")
     description = "\n\n".join(lines) + "\n\n" + " ".join(tags)
     return {"titles": uniq[:3], "description": description, "hashtags": tags,
-            "keywords": kws, "short_text": hook, "card": card_parts(sents, kws, guest, category)}
+            "keywords": kws, "short_text": hook, "cta": cta,
+            "card": card_parts(text, topic_words, guest, category, tema)}
 
 
 _LEADS = {
@@ -153,16 +170,22 @@ _LEADS_NO_GUEST = {
 }
 
 
-def card_parts(sents: list[str], kws: list[str], guest: str | None, category: str) -> dict:
-    """Partes do título sobreposto (chamada, frase real e pergunta), sempre a partir da própria fala."""
+def card_parts(text: str, topic_words: list[str], guest: str | None, category: str,
+               tema: str | None = None) -> dict:
+    """Partes do título sobreposto, sempre a partir da própria fala (limpa das muletas).
+
+    Sem frase boa o bastante, a caixa mostra o assunto ("Fulano sobre X") em vez de uma frase solta.
+    """
     lead = (_LEADS.get(category, "{g} diz:").format(g=guest) if guest
             else _LEADS_NO_GUEST.get(category, "Escuta essa:"))
-    affirm = [s for s in sents if not s.endswith("?")]
-    quote = _best_quote(affirm, kws, max_chars=80) or _best_quote(sents, kws, max_chars=80)
-    questions = [s for s in sents if s.endswith("?") and len(s) <= 80]
+    quote = phrases.best_quote(text, topic_words, max_chars=80)
     quote = quote.rstrip(".") if quote else None
-    return {"lead": lead, "quote": quote, "question": questions[0] if questions else None, "guest": guest,
-            "headline": f"{lead} “{quote}”" if quote else lead}
+    question = phrases.best_question(text, max_chars=80)
+    topic_line = None
+    if tema:
+        topic_line = f"{guest} sobre {tema}" if guest else f"Papo sobre {tema}"
+    return {"lead": lead, "quote": quote, "question": question, "guest": guest, "topic_line": topic_line,
+            "headline": f"{lead} “{quote}”" if quote else (topic_line or lead)}
 
 
 def _quotes_ok(title: str, text: str) -> bool:
@@ -185,16 +208,42 @@ def generate(text: str, source_title: str, category: str) -> dict:
         merged = ai_titles[:2] + [t for t in base["titles"] if t not in ai_titles]
         base["titles"] = merged[:3]
         base["engine"] = "ollama+heuristica"
-    desc = data.get("descricao")
-    if isinstance(desc, str) and 20 <= len(desc) <= 600:
-        tags = base["hashtags"]
-        extra = [h if h.startswith("#") else hashtag(h) for h in (data.get("hashtags") or []) if isinstance(h, str)]
+    tags = base["hashtags"]
+    extra = [h if h.startswith("#") else hashtag(h) for h in (data.get("hashtags") or []) if isinstance(h, str)]
+    if extra:
         # fixas (#shorts, #cortes, convidado, programa) + as da IA + as de palavras-chave
         fixed = [t for t in tags if t in ("#shorts", "#cortes")] + tags[2:4]
         tags = list(dict.fromkeys(fixed + [h for h in extra if h and len(h) > 2] + tags))[:10]
         base["hashtags"] = tags
-        base["description"] = desc.strip() + (f"\n\n🎙️ {source_title}" if source_title else "") \
-            + "\n\n" + " ".join(tags)
+
+    def ok(key: str, lo: int, hi: int) -> str | None:
+        v = data.get(key)
+        return v.strip() if isinstance(v, str) and lo <= len(v.strip()) <= hi and _quotes_ok(v, text) else None
+
+    card = dict(base.get("card") or {})
+    caixa = data.get("caixa") if isinstance(data.get("caixa"), dict) else {}
+    frase, chamada = caixa.get("frase"), caixa.get("chamada")
+    if isinstance(frase, str) and len(frase.strip()) <= 90 and phrases.in_transcript(frase, text):
+        card["quote"] = phrases.clean(frase.strip().strip("“”\"")).rstrip(".")
+        if isinstance(chamada, str) and 4 <= len(chamada.strip()) <= 45 and '"' not in chamada and "“" not in chamada:
+            card["lead"] = chamada.strip() if chamada.strip().endswith(":") else chamada.strip() + ":"
+        base["engine"] = "ollama+heuristica"
+    gancho, contexto, cta = ok("gancho", 8, 100), ok("contexto", 15, 200), ok("chamada", 6, 100)
+    if gancho and (contexto or cta):
+        lines = [gancho] + ([contexto] if contexto else [])
+        if card.get("quote") and norm(card["quote"]) not in norm(gancho + " " + (contexto or "")):
+            lines.append(f"“{card['quote']}”")
+        lines.append(cta or base["cta"])
+        if source_title:
+            lines.append(f"🎙️ {source_title}")
+        base["description"] = "\n\n".join(lines) + "\n\n" + " ".join(tags)
+        base["short_text"] = gancho
+        base["engine"] = "ollama+heuristica"
+    else:
+        desc = ok("descricao", 20, 600)  # formato antigo
+        if desc:
+            base["description"] = desc + (f"\n\n🎙️ {source_title}" if source_title else "") + "\n\n" + " ".join(tags)
+    base["card"] = card
     manchete = data.get("manchete")
     if isinstance(manchete, str) and 10 <= len(manchete.strip()) <= 110 and _quotes_ok(manchete, text):
         base["card"] = dict(base.get("card") or {}) | {"headline": manchete.strip()}

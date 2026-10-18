@@ -143,6 +143,15 @@ Com o Ollama ativo, os 15 melhores candidatos são reavaliados pela IA (30% da n
 são sugeridos por ela — sempre validados (citações que não existem na fala são descartadas). Sem o Ollama, o motor
 heurístico local funciona normalmente.
 
+**Para descrições melhores em português**, se o computador tiver 16 GB de RAM, prefira `ollama pull qwen2.5:7b`
+(≈4,7 GB) e troque o modelo em Configurações. O `llama3.2:3b` funciona, mas escreve pior em português.
+
+**Como o texto é montado:** a descrição tem gancho → contexto (quem fala, em qual programa, sobre o quê) → uma frase
+real do trecho → pergunta para comentar → crédito → hashtags. As frases são limpas das muletas da fala ("né", "aí",
+"tipo", "tá ligado") e só entram se fizerem sentido sozinhas; sem frase boa, a caixa mostra o assunto
+("Fulano sobre X") em vez de uma frase solta. Com o Ollama, a frase da caixa sugerida pela IA só é usada se existir
+na transcrição.
+
 ### Editor Concat opcional (ajustes finos, estilo CapCut)
 
 O [Concat](https://github.com/jub0t/Concat) é um editor de vídeo gratuito e open source. Com ele instalado
@@ -223,7 +232,7 @@ clipflow-studio/
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               134 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               145 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -247,7 +256,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 134 testes (~7 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 145 testes (~7 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

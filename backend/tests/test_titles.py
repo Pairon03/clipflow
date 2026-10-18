@@ -88,10 +88,11 @@ def test_long_text_is_limited_with_ellipsis():
 
 
 def test_card_parts_use_real_speech():
-    sents = ["Eu treinei todo dia durante dez anos.", "Você acha que vale a pena?", "Ninguém acreditava em mim."]
-    parts = metadata.card_parts(sents, ["treinei"], "Craque Neto", "História")
+    text = "Eu treinei todo dia durante dez anos. Você acha que vale a pena? Ninguém acreditava em mim."
+    parts = metadata.card_parts(text, ["treinei"], "Craque Neto", "História", "treino")
     assert parts["guest"] == "Craque Neto" and parts["question"] == "Você acha que vale a pena?"
-    assert parts["quote"] and parts["quote"] in " ".join(sents)
+    assert parts["quote"] and parts["quote"] in text
+    assert parts["topic_line"] == "Craque Neto sobre treino"
     assert parts["headline"].startswith(parts["lead"])
 
 
