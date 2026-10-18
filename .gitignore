@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+node_modules/
+frontend/dist/
+ClipFlowStudio/
+config.toml
+bin/
+*.log

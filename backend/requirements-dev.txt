@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8
+httpx>=0.27
+scikit-image>=0.24   # imagem de rosto de domínio público usada para gerar vídeos de teste

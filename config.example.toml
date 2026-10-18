@@ -1,0 +1,49 @@
+# ClipFlow Studio — arquivo de configuração
+# Copie para "config.toml" e ajuste. Tudo que não estiver aqui usa o padrão.
+# Várias opções também podem ser alteradas pela página "Configurações" da interface
+# (essas alterações ficam salvas no banco SQLite e têm prioridade sobre este arquivo).
+
+[server]
+host = "127.0.0.1"         # use "0.0.0.0" apenas se quiser acessar pela rede local
+port = 8000
+# Token opcional. Se definido, toda chamada à API exige "Authorization: Bearer <token>"
+# (a interface pede o token na primeira abertura). Recomendado se host = "0.0.0.0".
+access_token = ""
+
+[storage]
+# Pasta raiz de dados. Relativa à pasta do projeto ou absoluta.
+data_dir = "ClipFlowStudio"
+
+[limits]
+max_upload_mb = 4096          # tamanho máximo de upload
+max_source_minutes = 240      # duração máxima do vídeo de origem
+max_concurrent_jobs = 1       # tarefas simultâneas (aumente só com CPU/RAM sobrando)
+max_attempts = 2              # tentativas por tarefa antes de marcar como falha
+max_clips_per_project = 20
+
+[transcription]
+engine = "faster-whisper"
+model = "small"               # tiny | base | small | medium | large-v3 (maior = melhor e mais lento)
+device = "auto"               # auto | cpu | cuda
+compute_type = "int8"         # int8 é o mais leve para CPU
+language = "pt"
+vad_filter = true             # remove silêncios longos antes de transcrever
+
+[ai]
+# IA local opcional via Ollama (https://ollama.com). Se desligado ou indisponível,
+# a seleção de cortes e os títulos usam o motor heurístico local (sempre disponível).
+ollama_enabled = false
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "llama3.2:3b"
+ollama_timeout_s = 120
+
+[render]
+width = 1080
+height = 1920
+fps_max = 30
+video_preset = "veryfast"     # ultrafast..slow (mais lento = arquivo menor/melhor)
+crf = 20
+audio_bitrate = "160k"
+loudnorm = true               # normalização moderada (-14 LUFS)
+face_tracking = true          # desligue em computadores modestos (usa enquadramento central)
+verify_decode = true          # decodifica o arquivo final inteiro para verificar integridade
