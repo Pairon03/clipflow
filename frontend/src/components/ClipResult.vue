@@ -1,7 +1,7 @@
 <script setup>
-import { ref } from 'vue'
-import { Download, Copy, Trash2, FileText, Pencil, Save } from 'lucide-vue-next'
-import { api, fileUrl } from '../api'
+import { onMounted, ref } from 'vue'
+import { Download, Copy, Trash2, FileText, Pencil, Save, Clapperboard, ExternalLink } from 'lucide-vue-next'
+import { api, fileUrl, getMeta } from '../api'
 import { fmtDuration, fmtDate, fmtBytes, toast } from '../utils'
 
 const props = defineProps({ clip: Object, showProject: Boolean })
@@ -10,6 +10,26 @@ const emit = defineEmits(['changed', 'deleted'])
 const editing = ref(false)
 const titles = ref([...(props.clip.titles || [])])
 const description = ref(props.clip.description)
+
+const concatAvailable = ref(false)
+const concatBusy = ref(false)
+onMounted(async () => {
+  concatAvailable.value = !!(await getMeta().catch(() => ({}))).concat_available
+})
+async function toConcat() {
+  concatBusy.value = true
+  try {
+    await api(`/api/clips/${props.clip.id}/concat`, { method: 'POST' })
+    toast('Preparando projeto no Concat… acompanhe na página do projeto', 'success')
+    emit('changed')
+  } catch (e) { toast(e.message, 'error', 6000) } finally { concatBusy.value = false }
+}
+async function openConcat() {
+  try {
+    await api(`/api/clips/${props.clip.id}/concat/open`, { method: 'POST' })
+    toast('Abrindo no Concat…', 'success')
+  } catch (e) { toast(e.message, 'error', 6000) }
+}
 
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('Copiado!', 'success', 1800) } catch { toast('Não foi possível copiar', 'error') }
@@ -69,6 +89,14 @@ async function remove() {
         <button v-if="!editing" class="btn-ghost p-2" @click="editing = true" title="Editar textos" aria-label="Editar textos"><Pencil class="h-3.5 w-3.5" /></button>
         <button v-else class="btn-secondary p-2" @click="save" title="Salvar" aria-label="Salvar textos"><Save class="h-3.5 w-3.5" /></button>
         <button class="btn-ghost p-2 text-red-300 hover:text-red-200" @click="remove" title="Excluir" aria-label="Excluir"><Trash2 class="h-3.5 w-3.5" /></button>
+      </div>
+      <div v-if="concatAvailable" class="flex flex-wrap gap-1.5">
+        <button class="btn-secondary flex-1 py-2 text-xs" :disabled="concatBusy" @click="toConcat" title="Cria um projeto do Concat com o vídeo sem legenda e as legendas como textos editáveis">
+          <Clapperboard class="h-3.5 w-3.5" /> {{ clip.render_info?.concat_project ? 'Recriar no Concat' : 'Editar no Concat' }}
+        </button>
+        <button v-if="clip.render_info?.concat_project" class="btn-secondary py-2 text-xs" @click="openConcat" :title="clip.render_info.concat_project">
+          <ExternalLink class="h-3.5 w-3.5" /> Abrir
+        </button>
       </div>
       <div class="text-[11px] text-ink-500">{{ fmtBytes(clip.size_bytes) }} · 1080×1920 · H.264/AAC<span v-if="clip.render_info?.metadata_engine"> · textos: {{ clip.render_info.metadata_engine }}</span></div>
     </div>

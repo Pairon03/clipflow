@@ -82,6 +82,24 @@ Com o Ollama ativo, os 15 melhores candidatos são reavaliados pela IA (30% da n
 são sugeridos por ela — sempre validados (citações que não existem na fala são descartadas). Sem o Ollama, o motor
 heurístico local funciona normalmente.
 
+### Editor Concat opcional (ajustes finos, estilo CapCut)
+
+O [Concat](https://github.com/jub0t/Concat) é um editor de vídeo gratuito e open source. Com ele instalado
+([download](https://concatenate.pages.dev/#download)), cada Short ganha o botão **Editar no Concat**:
+
+1. O ClipFlow renderiza uma versão do corte **sem legenda queimada** (`exports/<projeto>/<corte>_clean.mp4`).
+2. Cria um projeto do Concat em 1080×1920 (`ClipFlowStudio/concat/<projeto>/<corte>/`) com esse vídeo e as legendas
+   como **textos editáveis**, um bloco por frase curta.
+3. **Abrir** abre o projeto na janela do Concat. Lá você ajusta textos, efeitos e transições e exporta.
+
+O ClipFlow detecta o Concat sozinho nos caminhos padrão. Se não detectar, informe o executável em
+**Configurações → IA local → Executável do Concat**. Os dois programas conversam pelo servidor MCP embutido no
+Concat (`concat --mcp headless`), como processos separados: nenhum código do Concat (licença AGPL-3.0) é
+incorporado ao ClipFlow.
+
+> No Concat, as legendas vêm por frase. O destaque animado palavra a palavra continua existindo apenas no MP4
+> renderizado pelo próprio ClipFlow.
+
 ---
 
 ## Direitos autorais e YouTube
@@ -122,9 +140,10 @@ clipflow-studio/
 │   │   │   ├── render.py      remoção de pausas, filtros FFmpeg, H.264/AAC
 │   │   │   ├── metadata.py    títulos, descrição, hashtags
 │   │   │   ├── editing.py     correção de legenda mantendo a sincronização
+│   │   │   ├── concat_bridge.py  ponte MCP com o editor Concat (opcional)
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               83 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               89 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -148,7 +167,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 83 testes (~3 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 89 testes (~3 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

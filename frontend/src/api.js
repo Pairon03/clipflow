@@ -74,3 +74,10 @@ export function uploadFile(kind, file, onProgress) {
     xhr.send(file)
   })
 }
+
+// Metadados do servidor (estilos, limites, Concat disponível), buscados uma vez
+let metaPromise = null
+export function getMeta() {
+  if (!metaPromise) metaPromise = api('/api/meta').catch((e) => { metaPromise = null; throw e })
+  return metaPromise
+}

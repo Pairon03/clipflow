@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **83 testes automatizados:
-82 passam, 1 é pulado** (Whisper — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **89 testes automatizados:
+88 passam, 1 é pulado** (Whisper — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -62,6 +62,16 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Títulos (até 3), descrição, hashtags, palavras-chave | ✅ | heurística usa só frases reais da fala; IA local validada |
 | Biblioteca com busca, filtro, seleção, ZIP e exclusão | ✅ | |
 | Relatórios de processamento exportáveis | ⏳ | hoje: dashboard + log por projeto |
+
+## Integração com o editor Concat (opcional)
+
+| Funcionalidade | Status | Observações |
+|---|---|---|
+| Detecção do executável e validação do caminho | ✅ | só aceita executáveis com nome `concat*` |
+| Cliente MCP (stdio) com tempo limite e erros legíveis | ✅ | testado com servidor falso e com o `concat-mcp` real (v0.2.7, compilado do código enviado) |
+| "Editar no Concat": vídeo sem legenda + projeto 1080×1920 + legendas editáveis | ✅ | o projeto criado foi reaberto e **exportado pelo próprio Concat** (H.264/AAC 1080×1920) com as legendas |
+| "Abrir": abre o projeto na janela do Concat | 🟡 | usa `concat --project <pasta>`. **Não testado com a janela**: aqui só existe o binário sem interface gráfica |
+| Instalador do Concat para Windows | ⏳ | você instala o Concat separadamente (download oficial) |
 
 ## Fase 4 — Expansão (pendente)
 

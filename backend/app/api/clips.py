@@ -188,3 +188,50 @@ def library_zip(ids: str = Query(..., max_length=20000)):
     clips = db.fetch_all(f"SELECT * FROM clips WHERE status = 'done' AND id IN ({','.join('?' * len(id_list))}) "
                          "ORDER BY project_id, start", tuple(id_list))
     return zip_clips(clips, "ClipFlow_Shorts")
+
+
+# ------------------------------------------------------------------ Concat (editor externo opcional)
+@router.post("/clips/{cid}/concat")
+def clip_to_concat(cid: str):
+    """Enfileira a criação de um projeto editável no Concat para este corte."""
+    from ..pipeline import concat_bridge
+    from ..worker import worker
+
+    clip = get_clip_or_404(cid)
+    project = get_project_or_404(clip["project_id"])
+    if not concat_bridge.find_executable():
+        raise HTTPException(422, "Concat não encontrado. Instale o Concat ou informe o caminho em Configurações.")
+    if project["status"] in ACTIVE_STATUSES:
+        raise HTTPException(409, "Aguarde o processamento atual terminar")
+    if not runner.transcript_path(clip["project_id"]).exists():
+        raise HTTPException(409, "O projeto ainda não foi analisado")
+    try:
+        worker.enqueue(clip["project_id"], "concat", {"clip_id": cid})
+    except ValueError as exc:
+        raise HTTPException(409, str(exc))
+    return {"ok": True}
+
+
+@router.post("/clips/{cid}/concat/open")
+def open_clip_in_concat(cid: str):
+    """Abre o projeto do Concat deste corte na janela do editor (no computador onde o ClipFlow roda)."""
+    from ..pipeline import concat_bridge
+    from ..pipeline.errors import PipelineError
+
+    clip = get_clip_or_404(cid)
+    path = (clip.get("render_info") or {}).get("concat_project")
+    folder = public_path(path)
+    if not folder or not folder.is_dir():
+        raise HTTPException(404, "Projeto do Concat ainda não foi criado para este corte")
+    try:
+        concat_bridge.open_in_editor(folder)
+    except PipelineError as exc:
+        raise HTTPException(422, str(exc))
+    return {"ok": True, "path": str(folder)}
+
+
+@router.get("/concat/status")
+def concat_status():
+    from ..pipeline import concat_bridge
+
+    return concat_bridge.status()

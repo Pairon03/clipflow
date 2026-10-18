@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from .. import config, db, storage
-from ..pipeline import ffmpeg, framing, llm, transcribe, youtube
+from ..pipeline import concat_bridge, ffmpeg, framing, llm, transcribe, youtube
 from ..pipeline.errors import FatalPipelineError
 from ..security import RIGHTS_BASES, ValidationError, parse_youtube_url
 from ..worker import worker
@@ -33,6 +33,7 @@ def meta():
         "max_clips": config.get("limits.max_clips_per_project"),
         "max_upload_mb": config.get("limits.max_upload_mb"),
         "max_source_minutes": config.get("limits.max_source_minutes"),
+        "concat_available": bool(concat_bridge.find_executable()),
     }
 
 
@@ -86,6 +87,7 @@ def system_status():
         "face_detector": det.kind,
         "yt_dlp": _ytdlp_version(),
         "data_dir": str(storage.root()),
+        "concat": {"path": str(concat_bridge.find_executable() or "") or None},
         "queue": worker.stats(),
     }
 

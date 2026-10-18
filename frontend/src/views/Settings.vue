@@ -82,6 +82,10 @@ const models = [
           <div class="text-sm"><div class="font-medium text-white">yt-dlp</div><div class="text-ink-400">{{ status.yt_dlp ? 'Versão ' + status.yt_dlp + ' — mantenha atualizado (pip install -U yt-dlp)' : 'Não instalado' }}</div></div>
         </li>
         <li class="flex items-start gap-3 rounded-xl bg-ink-850 p-4">
+          <component :is="status.concat?.path ? CheckCircle2 : XCircle" class="mt-0.5 h-5 w-5 shrink-0" :class="status.concat?.path ? 'text-emerald-400' : 'text-ink-500'" />
+          <div class="min-w-0 text-sm"><div class="font-medium text-white">Editor Concat — opcional</div><div class="break-all text-ink-400">{{ status.concat?.path || 'Não encontrado. Instale em concatenate.pages.dev ou informe o caminho abaixo.' }}</div></div>
+        </li>
+        <li class="flex items-start gap-3 rounded-xl bg-ink-850 p-4">
           <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
           <div class="min-w-0 text-sm"><div class="font-medium text-white">Pasta de dados</div><div class="break-all text-ink-400">{{ status.data_dir }}</div></div>
         </li>
@@ -124,6 +128,11 @@ const models = [
         <label class="flex items-center justify-between text-sm text-ink-200">Usar Ollama<input v-model="form['ai.ollama_enabled']" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
         <div><label class="label" for="ourl">Endereço</label><input id="ourl" v-model="form['ai.ollama_url']" class="input" /></div>
         <div><label class="label" for="omodel">Modelo</label><input id="omodel" v-model="form['ai.ollama_model']" class="input" /></div>
+        <div class="border-t border-ink-700 pt-4">
+          <label class="label" for="cpath">Executável do Concat (opcional)</label>
+          <input id="cpath" v-model="form['concat.path']" class="input" placeholder="Detectado automaticamente — ex.: C:\Program Files\Concat\concat.exe" />
+          <p class="mt-1.5 text-xs text-ink-500">Editor de vídeo gratuito (estilo CapCut). Com ele, cada Short ganha um botão "Editar no Concat" com legendas editáveis.</p>
+        </div>
       </section>
 
       <section class="card space-y-4 p-6">

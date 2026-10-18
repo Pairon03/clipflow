@@ -246,3 +246,39 @@ def copy_upload(src_tmp: Path, pid: str, ext: str) -> Path:
     dst = storage.area_dir("downloads", pid) / f"source{ext}"
     shutil.move(str(src_tmp), dst)
     return dst
+
+
+# ================================================================ CONCAT
+def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
+    """Gera uma versão sem legenda do corte e monta um projeto editável no Concat."""
+    from . import concat_bridge
+
+    exe = concat_bridge.find_executable()
+    if not exe:
+        raise FatalPipelineError("Concat não encontrado. Instale o Concat ou informe o caminho em Configurações.")
+    p = _project(pid)
+    opts = p["options"] or {}
+    clip = db.fetch_one("SELECT * FROM clips WHERE id = ? AND project_id = ?", (clip_id, pid))
+    if not clip:
+        raise FatalPipelineError("Corte não encontrado")
+    src = storage.ensure_inside_root(p["source_path"])
+    info = ffmpeg.probe(src).as_dict()
+    words = clip["words"] or render.words_for_clip(transcribe.all_words(transcribe.load(transcript_path(pid))),
+                                                   clip["start"], clip["end"])
+
+    ctx.span(0.0, 0.75, "Preparando vídeo sem legenda para o Concat")
+    clean = render.render_clip(src, info, clip, words, opts | {"captions": False},
+                               storage.area_dir("exports", pid), storage.area_dir("subtitles", pid),
+                               storage.area_dir("clips", pid), ctx, variant="_clean")
+    ctx.check()
+    ctx.span(0.75, 1.0, "Criando projeto no Concat")
+    project_dir = concat_bridge.build_project(
+        exe, storage.area_dir("concat", pid), clip_id, Path(clean["output_path"]), clean["words_out"],
+        opts.get("caption_style", "classic"), clean["render_info"]["fps"],
+        config.get("render.width"), config.get("render.height"))
+    current = db.fetch_one("SELECT render_info_json FROM clips WHERE id = ?", (clip_id,))["render_info"] or {}
+    db.update("clips", clip_id, render_info_json=current | {"concat_project": str(project_dir),
+                                                            "concat_video": clean["output_path"]})
+    ctx.log.info("Projeto do Concat criado em %s", project_dir)
+    ctx.progress(1.0)
+    return str(project_dir)

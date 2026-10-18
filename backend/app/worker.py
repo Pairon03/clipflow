@@ -174,6 +174,14 @@ class Worker:
                 self._finish(job_id, "done")
                 msg = f"{res['done']} Shorts prontos" + (f", {res['failed']} com falha" if res["failed"] else "")
                 db.update("projects", pid, status="completed", stage=msg, progress=1, error=None)
+            elif kind == "concat":
+                payload = job["payload"] or {}
+                runner.run_concat_export(pid, payload.get("clip_id", ""), ctx)
+                self._finish(job_id, "done")
+                has_done = db.fetch_one("SELECT COUNT(*) AS n FROM clips WHERE project_id = ? AND status = 'done'",
+                                        (pid,))["n"]
+                db.update("projects", pid, status="completed" if has_done else "awaiting_review",
+                          stage="Projeto do Concat pronto", progress=1, error=None)
             else:
                 raise PipelineError(f"Tipo de tarefa desconhecido: {kind}")
             lg.info("Tarefa %s concluída em %.1fs", job_id, time.monotonic() - started)

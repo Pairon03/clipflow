@@ -55,6 +55,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "face_tracking": True,
         "verify_decode": True,
     },
+    "concat": {"path": ""},
 }
 
 # Chaves que a interface pode alterar em tempo de execução, com o tipo esperado.
@@ -76,6 +77,7 @@ EDITABLE: dict[str, type] = {
     "render.loudnorm": bool,
     "render.face_tracking": bool,
     "render.verify_decode": bool,
+    "concat.path": str,
 }
 
 ALLOWED_VALUES: dict[str, set] = {
@@ -162,6 +164,10 @@ def coerce(key: str, value: Any) -> Any:
         raise ValueError(f"Valor não permitido para {key}: {v}")
     if key == "ai.ollama_url" and not (v.startswith("http://") or v.startswith("https://")):
         raise ValueError("URL do Ollama deve começar com http:// ou https://")
+    if key == "concat.path" and v:
+        p = Path(v)
+        if not (p.is_file() and p.name.lower().startswith("concat")):
+            raise ValueError("Caminho do Concat inválido: aponte para o executável concat (ou concat.exe)")
     if key == "limits.max_concurrent_jobs" and not 1 <= v <= 8:
         raise ValueError("Tarefas simultâneas deve estar entre 1 e 8")
     return v

@@ -158,7 +158,7 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
 
 # ---------------------------------------------------------------- render
 def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], options: dict,
-                out_dir: Path, sub_dir: Path, work_dir: Path, ctx: JobContext) -> dict:
+                out_dir: Path, sub_dir: Path, work_dir: Path, ctx: JobContext, variant: str = "") -> dict:
     """Renderiza um corte. Retorna informações do resultado. Lança PipelineError em falha."""
     start, end = float(clip["start"]), float(clip["end"])
     if end - start < 1.0:
@@ -212,8 +212,9 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     ctx.span(a + (b - a) * 0.35, a + (b - a) * 0.92, ctx.stage)
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
-    tmp_out = work_dir / f"{clip_id}.partial.mp4"
-    final = out_dir / f"{clip_id}.mp4"
+    # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
+    tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
+    final = out_dir / f"{clip_id}{variant}.mp4"
     args = [
         "-ss", f"{start:.3f}", "-t", f"{end - start + 0.1:.3f}", "-i", str(src),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
@@ -229,7 +230,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     info = ffmpeg.verify_output(tmp_out, out_duration, out_w, out_h,
                                 decode=bool(config.get("render.verify_decode")), ctx=ctx)
     tmp_out.replace(final)
-    thumb = out_dir / f"{clip_id}.jpg"
+    thumb = out_dir / f"{clip_id}{variant}.jpg"
     try:
         ffmpeg.thumbnail(final, thumb, at=min(1.5, out_duration / 2))
     except PipelineError:
@@ -239,6 +240,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "output_path": str(final), "thumb_path": str(thumb) if thumb else None,
         "srt_path": str(srt_path) if srt_path else None, "duration": info["duration"],
         "size_bytes": final.stat().st_size,
+        "words_out": out_words,
         "render_info": {"layout": plan["layout"], "detector": plan.get("detector"), "faces": plan.get("faces"),
                         "note": plan.get("note", ""), "keyframes": len(plan.get("keyframes", [])),
                         "intervals": len(intervals), "removed_pause_s": round((end - start) - out_duration, 2),

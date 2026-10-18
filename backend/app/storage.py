@@ -9,6 +9,7 @@ Estrutura (cada projeto tem sua própria subpasta em cada área):
       clips/<id>/                    arquivos intermediários dos cortes
       subtitles/<id>/                legendas .ass/.srt de cada corte
       exports/<id>/                  MP4 finais + miniaturas
+      concat/<id>/<corte>/           projetos do editor Concat (opcional)
       logs/<id>.log                  log de processamento do projeto
       tmp/                           arquivos temporários (ZIPs etc.)
 """
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from . import config
 
-AREAS = ("projects", "downloads", "transcripts", "clips", "subtitles", "exports")
+AREAS = ("projects", "downloads", "transcripts", "clips", "subtitles", "exports", "concat")
 _ID_RE = re.compile(r"^[a-f0-9]{12}$")
 
 
