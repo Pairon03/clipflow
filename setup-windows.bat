@@ -6,7 +6,17 @@ echo ============================================
 echo   ClipFlow Studio - instalacao (Windows)
 echo ============================================
 
-where python >nul 2>nul || (echo [ERRO] Python nao encontrado. Instale o Python 3.12 ou 3.13 em https://www.python.org/downloads/ marcando "Add python.exe to PATH". & pause & exit /b 1)
+rem Escolhe Python 3.13 ou 3.12 (o faster-whisper ainda nao tem pacotes para 3.14+ no Windows)
+set "PY="
+py -3.13 -c "import sys" >nul 2>nul && set "PY=py -3.13"
+if not defined PY py -3.12 -c "import sys" >nul 2>nul && set "PY=py -3.12"
+if not defined PY (
+  echo [ERRO] Python 3.13 ou 3.12 nao encontrado.
+  echo         Baixe o Python 3.13 em https://www.python.org/downloads/windows/
+  echo         Ele pode ficar instalado junto com outras versoes, como a 3.15.
+  pause & exit /b 1
+)
+echo Usando %PY%
 where node >nul 2>nul || (echo [ERRO] Node.js nao encontrado. Instale o Node.js LTS em https://nodejs.org & pause & exit /b 1)
 where ffmpeg >nul 2>nul
 if errorlevel 1 (
@@ -19,7 +29,7 @@ if errorlevel 1 (
 
 if not exist .venv (
   echo Criando ambiente virtual Python...
-  python -m venv .venv || (echo [ERRO] Falha ao criar .venv & pause & exit /b 1)
+  %PY% -m venv .venv || (echo [ERRO] Falha ao criar .venv & pause & exit /b 1)
 )
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip

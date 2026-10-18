@@ -17,7 +17,7 @@ Tudo roda **no seu computador**, sem APIs pagas (custo mensal: R$ 0). A IA local
 
 | Programa | Como instalar | Para quê |
 |---|---|---|
-| **Python 3.12 ou 3.13** | [python.org/downloads](https://www.python.org/downloads/) — marque **"Add python.exe to PATH"** | backend e IA |
+| **Python 3.13** (ou 3.12) | [python.org/downloads/windows](https://www.python.org/downloads/windows/). **Não use 3.14/3.15**: a transcrição ainda não tem pacotes para elas. Pode ficar instalado junto com outras versões | backend e IA |
 | **Node.js LTS** | [nodejs.org](https://nodejs.org) | compilar a interface (só na instalação) |
 | **FFmpeg (build "full")** | no PowerShell: `winget install Gyan.FFmpeg` | corte, render e legendas |
 
