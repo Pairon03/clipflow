@@ -210,6 +210,11 @@ const models = [
         <label class="flex items-center justify-between text-sm text-ink-200"><span class="flex items-center gap-2"><ScanFace class="h-4 w-4" /> Rastreamento de rostos</span><input v-model="form['render.face_tracking']" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
         <label class="flex items-center justify-between text-sm text-ink-200">Normalização de áudio (-14 LUFS)<input v-model="form['render.loudnorm']" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
         <label class="flex items-center justify-between text-sm text-ink-200">Verificar integridade decodificando o arquivo final<input v-model="form['render.verify_decode']" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+        <div class="border-t border-ink-700 pt-4">
+          <label class="label" for="cwords">Palavras extras para mutar</label>
+          <textarea id="cwords" v-model="form['censor.extra_words']" rows="2" maxlength="2000" class="input" placeholder="separe por vírgula — ex.: treta, nome de marca" />
+          <p class="mt-1.5 text-xs text-ink-500">Os palavrões mais comuns já são silenciados. Use para acrescentar outras palavras.</p>
+        </div>
       </section>
 
       <section class="card space-y-4 p-6">

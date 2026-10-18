@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import color, enhance, ffmpeg, framing, overlay, subtitles
+from . import censor, color, enhance, ffmpeg, framing, overlay, sfx, subtitles
 from .context import JobContext
 from .errors import PipelineError
 
@@ -148,10 +148,43 @@ def _select_expr(intervals: list[tuple[float, float]], fps: float) -> str:
     return "+".join(f"between(t,{a:.4f},{b - half:.4f})" for a, b in intervals)
 
 
+TRANSITIONS = {"zoom", "flash", "fade", "nenhuma"}
+ZOOM_FX_SCALE = 0.10     # zoom de ênfase: 10% de aproximação
+PUNCH_SCALE = 0.14       # "soco" de zoom na transição depois do gancho
+ZOOM_CENTER_Y = 0.4      # aproxima mirando a altura típica dos rostos
+
+
+def _ease(x: str) -> str:
+    return f"(1-cos(PI*clip({x},0,1)))/2"
+
+
+def effects_filter(zooms: list[tuple[float, float]], transition: str | None, at: float | None,
+                   out_w: int, out_h: int) -> str | None:
+    """Efeitos de vídeo no tempo final: zooms de ênfase suaves e transição depois do gancho.
+
+    O zoom é um scale por quadro (eval=frame) seguido de crop no tamanho do vídeo.
+    """
+    parts = [f"min({_ease(f'(t-{s:.3f})/0.25')},{_ease(f'({e + 0.35:.3f}-t)/0.35')})" for s, e in zooms]
+    terms = [f"{ZOOM_FX_SCALE}*({'+'.join(parts)})"] if parts else []
+    if transition == "zoom" and at is not None:
+        terms.append(f"{PUNCH_SCALE}*gte(t,{at:.3f})*pow(clip(1-(t-{at:.3f})/0.4,0,1),2)")
+    chain = []
+    if terms:
+        z = f"(1+min({'+'.join(terms)},0.2))"
+        chain.append(f"scale=w='trunc({out_w}*{z}/2)*2':h='trunc({out_h}*{z}/2)*2':eval=frame:flags=bicubic,"
+                     f"crop={out_w}:{out_h}:(iw-ow)/2:(ih-oh)*{ZOOM_CENTER_Y}")
+    if transition == "flash" and at is not None:
+        chain.append(f"eq=brightness='0.55*max(0,1-abs(t-{at:.3f})/0.12)':eval=frame")
+    elif transition == "fade" and at is not None:
+        chain.append(f"eq=brightness='-0.85*max(0,1-abs(t-{at:.3f})/0.16)':eval=frame")
+    return ",".join(chain) or None
+
+
 def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: int, src_h: int, fps: float,
                       ass_path: Path | None, out_duration: float, speed: float = 1.0,
                       hook_len: float | None = None, overlay_input: int | None = None,
-                      overlay_until: float | None = None, color_filter: str | None = None) -> str:
+                      overlay_until: float | None = None, color_filter: str | None = None,
+                      video_fx: str | None = None, mute: str | None = None, sfx_input: int | None = None) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
@@ -159,6 +192,7 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     O áudio é fatiado em blocos do tamanho de um quadro, então os dois cortam no mesmo ponto.
     `hook_len`: gancho de abertura, lido da 2ª entrada ([1:v]/[1:a]) e colocado antes de tudo.
     `color_filter`: cadeia de filtros de cor aplicada ao vídeo antes do título e da legenda.
+    `video_fx`: zooms/transição (effects_filter); `mute`: silencia palavrões; `sfx_input`: faixa de efeitos.
     """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
@@ -175,9 +209,10 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
         parts.append("[vh][ah][vm][am]concat=n=2:v=1:a=1[vc][ac]")
     speed_v = f"setpts=PTS/{speed:g}," if speed != 1.0 else ""
     parts.append(f"[vc]{speed_v}fps={fps:g}[vf]")
-    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vgr" if color_filter else "vlay"))
-    if color_filter:
-        parts.append(f"[vgr]{color_filter}[vlay]")
+    post_layout = ",".join(f for f in (color_filter, video_fx) if f)
+    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vgr" if post_layout else "vlay"))
+    if post_layout:
+        parts.append(f"[vgr]{post_layout}[vlay]")
     if overlay_input is not None:
         # título (PNG transparente do tamanho do vídeo) com entrada suave; some no fim se for "só no início"
         fade = "fade=t=in:st=0:d=0.3:alpha=1"
@@ -196,11 +231,20 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     post.append("format=yuv420p")
     parts.append(f"[vl]{','.join(post)}[vout]")
     audio = [f"atempo={speed:g}"] if speed != 1.0 else []  # acelera mantendo o tom de voz
+    if mute:
+        audio.append(mute)
     if config.get("render.loudnorm"):
         audio.append("loudnorm=I=-14:TP=-1.5:LRA=11")
-    audio.append(f"afade=t=in:st=0:d={FADE_IN},afade=t=out:st={fo_start:.3f}:d={FADE_OUT}")
-    audio.append("aresample=48000")
-    parts.append(f"[ac]{','.join(audio)}[aout]")
+    fades = f"afade=t=in:st=0:d={FADE_IN},afade=t=out:st={fo_start:.3f}:d={FADE_OUT},aresample=48000"
+    if sfx_input is not None:
+        # efeitos por baixo da fala, sem reduzir o volume dela (normalize=0) e com limitador contra picos
+        fmt = "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo"
+        parts.append(f"[ac]{','.join(audio + [fmt])}[amain]")
+        parts.append(f"[{sfx_input}:a]{fmt}[asfx]")
+        parts.append(f"[amain][asfx]amix=inputs=2:normalize=0:duration=first,"
+                     f"alimiter=limit=0.95:level=false:latency=true,{fades}[aout]")
+    else:
+        parts.append(f"[ac]{','.join(audio + [fades])}[aout]")
     return ";".join(parts)
 
 
@@ -286,6 +330,10 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         if e - s < 0.04:
             e = s + 0.04
         out_words.append({"text": w["text"], "start": round(s, 3), "end": round(min(e, out_duration), 3)})
+    censor_mode = options.get("censor", "nenhum")
+    muted: list[tuple[float, float]] = []
+    if censor_mode in ("mudo", "bip"):
+        out_words, muted = censor.censor_words(out_words)
     clip_id = clip["id"]
     split = plan["layout"] == "split"
     title_style = options.get("title_style_resolved") or "nenhum"
@@ -315,11 +363,23 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
 
     # 4) FFmpeg
     ctx.span(a + (b - a) * 0.35, a + (b - a) * 0.92, ctx.stage)
+    # efeitos: zooms nos momentos de ênfase, transição depois do gancho e sons discretos
+    transition = options.get("transition", "nenhuma") if hook else None
+    zooms = []
+    if options.get("zoom_fx", False) and not split:
+        zooms = enhance.pick_zooms(out_words, out_duration, skip_start=hook_out + 0.8)
+    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h)
+    sfx_path = sfx.build_track(out_duration, work_dir / f"{clip_id}{variant}.sfx.wav", options.get("sfx"),
+                               whoosh_at=hook_out if hook and transition != "nenhuma" else None,
+                               pop_at=([0.05] if card_png else []) + [s for s, _ in zooms],
+                               bips=muted if censor_mode == "bip" else None)
     overlay_idx = (2 if hook else 1) if card_png else None
+    sfx_idx = (1 + bool(hook) + bool(card_png)) if sfx_path else None
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
                               hook_len=(hook[1] - hook[0]) if hook else None,
                               overlay_input=overlay_idx, overlay_until=overlay_until,
-                              color_filter=color.chain(options.get("color_filter")))
+                              color_filter=color.chain(options.get("color_filter")), video_fx=video_fx,
+                              mute=censor.mute_filter(muted), sfx_input=sfx_idx)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
@@ -329,6 +389,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         *(["-ss", f"{start + hook[0]:.3f}", "-t", f"{hook[1] - hook[0] + 0.1:.3f}", "-i", str(src)] if hook else []),
         *(["-loop", "1", "-framerate", str(fps), "-t", f"{out_duration + 0.5:.3f}", "-i", str(card_png)]
           if card_png else []),
+        *(["-i", str(sfx_path)] if sfx_path else []),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", config.get("render.video_preset"), "-crf", str(config.get("render.crf")),
         "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(fps),
@@ -336,8 +397,9 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "-movflags", "+faststart", "-t", f"{out_duration:.3f}", str(tmp_out),
     ]
     ffmpeg.run(args, ctx=ctx, duration=out_duration, on_progress=ctx.progress)
-    if card_png:
-        storage_remove(card_png)
+    for tmp in (card_png, sfx_path):
+        if tmp:
+            storage_remove(tmp)
 
     # 5) verificação de integridade + miniatura
     ctx.span(a + (b - a) * 0.92, b, ctx.stage)
@@ -362,5 +424,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "cold_open": [hook[0], hook[1]] if hook else None,
                         "title_style": title_style if card_png else None,
                         "color_filter": options.get("color_filter") if color.chain(options.get("color_filter")) else None,
+                        "zooms": len(zooms), "zoom_times": [round(z0, 2) for z0, _ in zooms],
+                        "transition": transition if hook else None,
+                        "sfx": options.get("sfx") if sfx_path else None, "muted_words": len(muted),
                         "fps": fps, "tracks": plan.get("tracks", [])},
     }

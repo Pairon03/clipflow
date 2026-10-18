@@ -62,6 +62,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "tweet_text": "Você achou a melhor página de cortes do TikTok",
         "tweet_mode": "fixo",   # fixo: usa tweet_text | resumo: resume o trecho de cada corte
     },
+    "censor": {"extra_words": ""},  # palavras extras a silenciar, separadas por vírgula
 }
 
 # Chaves que a interface pode alterar em tempo de execução, com o tipo esperado.
@@ -88,6 +89,7 @@ EDITABLE: dict[str, type] = {
     "branding.channel_handle": str,
     "branding.tweet_text": str,
     "branding.tweet_mode": str,
+    "censor.extra_words": str,
 }
 
 ALLOWED_VALUES: dict[str, set] = {
@@ -179,6 +181,8 @@ def coerce(key: str, value: Any) -> Any:
         raise ValueError("Nome/@ do canal muito longo (máx. 40 caracteres)")
     if key == "branding.tweet_text" and len(v) > 140:
         raise ValueError("Frase do tweet muito longa (máx. 140 caracteres)")
+    if key == "censor.extra_words" and len(v) > 2000:
+        raise ValueError("Lista de palavras muito longa (máx. 2000 caracteres)")
     if key == "concat.path" and v:
         p = Path(v)
         if not (p.is_file() and p.name.lower().startswith("concat")):

@@ -7,6 +7,7 @@ import { fmtBytes, fmtDuration, toast, LAYOUT_LABELS, CAPTION_LABELS } from '../
 import ProgressBar from '../components/ProgressBar.vue'
 import TitleStylePicker from '../components/TitleStylePicker.vue'
 import FilterPicker from '../components/FilterPicker.vue'
+import EffectsOptions from '../components/EffectsOptions.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -98,6 +99,10 @@ const form = reactive({
   title_position: 'meio',
   cold_open: true,
   color_filter: 'nenhum',
+  transition: 'zoom',
+  zoom_fx: true,
+  sfx: 'sutil',
+  censor: 'mudo',
   rightsConfirmed: false,
   rightsBasis: 'own',
   rightsNote: '',
@@ -136,6 +141,7 @@ async function submit(force = false) {
         engine: form.engine, hook: form.hook, zoom: form.zoom,
         pace: form.pace, speed: form.speed, title_style: form.title_style, title_duration: form.title_duration,
         cold_open: form.cold_open, title_position: form.title_position, color_filter: form.color_filter,
+        transition: form.transition, zoom_fx: form.zoom_fx, sfx: form.sfx, censor: form.censor,
       },
       force,
     }
@@ -374,6 +380,11 @@ onMounted(async () => {
           <div>
             <span class="label">Filtro de cor</span>
             <FilterPicker v-model="form.color_filter" />
+          </div>
+
+          <div>
+            <span class="label">Efeitos</span>
+            <EffectsOptions :opts="form" :has-hook="form.cold_open" />
           </div>
 
           <div>

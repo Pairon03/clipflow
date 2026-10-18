@@ -9,7 +9,7 @@ import numpy as np
 
 from .. import config, db, storage
 from . import audio as audio_mod
-from . import ffmpeg, llm, metadata, render, selection, transcribe, youtube
+from . import censor, ffmpeg, llm, metadata, render, selection, transcribe, youtube
 from .context import JobContext
 from .errors import Cancelled, FatalPipelineError, PipelineError
 
@@ -233,7 +233,7 @@ def _render_with_concat(exe: Path, src: Path, info: dict, clip: dict, words: lis
     stage = ctx.stage
     # 1) vídeo base: enquadramento + remoção de pausas, sem legenda queimada (FFmpeg)
     ctx.span(a, a + (b - a) * 0.4, stage)
-    clean = render.render_clip(src, info, clip, words, opts | {"captions": False}, out_dir, sub_dir, work_dir, ctx,
+    clean = render.render_clip(src, info, clip, words, opts | {"captions": False, "zoom_fx": False}, out_dir, sub_dir, work_dir, ctx,
                                variant="_clean")
     ctx.check()
     duration = clean["duration"]
@@ -305,6 +305,8 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         last_exc: Exception | None = None
         text = " ".join(w["text"] for w in words)
         meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
+        if opts.get("censor", "nenhum") != "nenhum":
+            meta = censor.censor_meta(meta)  # palavrões mascarados também nos títulos e na descrição
         clip_opts = _clip_options(opts, meta, clip, order.index(clip["id"]) if clip["id"] in order else i)
         for attempt in range(2):
             try:
@@ -372,7 +374,7 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
                                                    clip["start"], clip["end"])
 
     ctx.span(0.0, 0.75, "Preparando vídeo sem legenda para o Concat")
-    clean = render.render_clip(src, info, clip, words, opts | {"captions": False},
+    clean = render.render_clip(src, info, clip, words, opts | {"captions": False, "zoom_fx": False},
                                storage.area_dir("exports", pid), storage.area_dir("subtitles", pid),
                                storage.area_dir("clips", pid), ctx, variant="_clean")
     ctx.check()
@@ -383,6 +385,8 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
     if not meta.get("card"):
         meta = meta | {"card": metadata.generate(" ".join(w["text"] for w in words),
                                                  p["source_title"] or p["name"], clip["category"]).get("card")}
+    if opts.get("censor", "nenhum") != "nenhum":
+        meta = censor.censor_meta(meta)
     opts = _clip_options(opts, meta, clip, None)
     hook, zoom_keys, _ = _concat_enhancements(clean["words_out"], clean["duration"],
                                               clean["render_info"]["layout"], opts, titles)

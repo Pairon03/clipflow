@@ -10,6 +10,7 @@ import ClipEditor from '../components/ClipEditor.vue'
 import ClipResult from '../components/ClipResult.vue'
 import TitleStylePicker from '../components/TitleStylePicker.vue'
 import FilterPicker from '../components/FilterPicker.vue'
+import EffectsOptions from '../components/EffectsOptions.vue'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -21,7 +22,7 @@ const acting = ref(false)
 const showAlternatives = ref(false)
 const reselect = ref({ count: 5, min_duration: 30, max_duration: 60 })
 const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, title_style: 'tweet', title_duration: 'inteiro',
-  title_position: 'topo', color_filter: 'nenhum' })
+  title_position: 'topo', color_filter: 'nenhum', transition: 'zoom', zoom_fx: true, sfx: 'sutil', censor: 'mudo' })
 let timer
 
 const active = computed(() => p.value && ACTIVE.includes(p.value.status))
@@ -47,7 +48,8 @@ watch(() => p.value?.options, (o) => {
     reselect.value = { count: o.count, min_duration: o.min_duration, max_duration: o.max_duration }
     edit.value = { pace: o.pace || 'natural', speed: o.speed || 1.0, cold_open: !!o.cold_open,
       title_style: o.title_style || (o.theme === false ? 'nenhum' : 'tweet'), title_duration: o.title_duration || 'inteiro',
-      title_position: o.title_position || 'topo', color_filter: o.color_filter || 'nenhum' }
+      title_position: o.title_position || 'topo', color_filter: o.color_filter || 'nenhum',
+      transition: o.transition || 'zoom', zoom_fx: o.zoom_fx ?? true, sfx: o.sfx || 'sutil', censor: o.censor || 'mudo' }
   }
 }, { immediate: true })
 
@@ -188,7 +190,11 @@ async function remove() {
           </div>
           <div class="w-full">
             <span class="label">Filtro de cor</span>
-            <FilterPicker v-model="edit.color_filter" :project-id="p.id" />
+            <FilterPicker v-model="edit.color_filter" :project-id="p.id" wide />
+          </div>
+          <div class="w-full">
+            <span class="label">Efeitos</span>
+            <EffectsOptions :opts="edit" :has-hook="edit.cold_open" wide />
           </div>
           <button class="btn-primary ml-auto" :disabled="!canEdit || acting" @click="applyEditAndRender"><Wand2 class="h-4 w-4" /> {{ done.length ? 'Refazer Shorts com este estilo' : 'Salvar estilo' }}</button>
         </div>

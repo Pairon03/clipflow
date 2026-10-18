@@ -96,6 +96,15 @@ def validate_options(raw: dict | None) -> dict:
     title_position = raw.get("title_position") or "topo"
     if title_position not in {"topo", "meio"}:
         raise HTTPException(422, "Posição do título inválida")
+    transition = raw.get("transition") or "zoom"
+    if transition not in {"zoom", "flash", "fade", "nenhuma"}:
+        raise HTTPException(422, "Transição inválida")
+    sfx = raw.get("sfx") or "sutil"
+    if sfx not in {"sutil", "normal", "nenhum"}:
+        raise HTTPException(422, "Nível de efeitos sonoros inválido")
+    censor = raw.get("censor") or "mudo"
+    if censor not in {"mudo", "bip", "nenhum"}:
+        raise HTTPException(422, "Modo de censura inválido")
     color_filter = raw.get("color_filter") or "nenhum"
     if color_filter not in COLOR_FILTERS:
         raise HTTPException(422, "Filtro de cor inválido")
@@ -137,6 +146,10 @@ def validate_options(raw: dict | None) -> dict:
         "title_position": title_position,
         "cold_open": bool(raw.get("cold_open", True)),
         "color_filter": color_filter,
+        "transition": transition,
+        "zoom_fx": bool(raw.get("zoom_fx", True)),
+        "sfx": sfx,
+        "censor": censor,
     }
 
 

@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **125 testes automatizados:
-123 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **134 testes automatizados:
+132 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -49,6 +49,10 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Títulos tweet / caixa / citação / variar | ✅ | PNG desenhado com Pillow e sobreposto pelo FFmpeg; quadros renderizados conferidos visualmente, inclusive no layout dividido |
 | Identidade do canal (nome, @, logo) no cartão de tweet | ✅ | upload validado, recorte quadrado de 256 px |
 | Título no topo ou no meio da tela | ✅ | centralizado pela altura real do cartão; quadro renderizado conferido |
+| Transição depois do gancho (zoom, flash, escurecer) | ✅ | quadros renderizados conferidos |
+| Zoom de ênfase no motor FFmpeg | ✅ | scale por quadro + crop; no máximo um a cada ~8 s |
+| Efeitos sonoros (whoosh, pop) | ✅ | teste mede o whoosh no instante da transição e a fala idêntica fora dos efeitos |
+| Palavrões silenciados / bipe e mascarados no texto | ✅ | teste mede silêncio total e o bipe em 1 kHz; depende da transcrição reconhecer a palavra |
 | Filtros de cor (Vivo, Quente, Frio, Cinema, Vintage, P&B) com prévia | ✅ | filtros do FFmpeg (eq, colorbalance, curves, vignette); prévia num quadro do próprio vídeo |
 | Normalização de áudio (loudnorm −14 LUFS) e fades discretos | ✅ | |
 | Rostos pequenos em planos muito abertos | 🟡 | MediaPipe short-range pode falhar; o Haar assume. Se nada for detectado, usa corte central |

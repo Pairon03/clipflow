@@ -2,7 +2,7 @@
 import { reactive } from 'vue'
 import { fileUrl } from '../api'
 
-const props = defineProps({ modelValue: String, projectId: String })
+const props = defineProps({ modelValue: String, projectId: String, wide: Boolean })
 const emit = defineEmits(['update:modelValue'])
 const filters = [
   { key: 'nenhum', name: 'Original', swatch: 'linear-gradient(135deg,#52525b,#a1a1aa)' },
@@ -19,7 +19,7 @@ const src = (k) => fileUrl(`/api/filters/preview?name=${k}${props.projectId ? `&
 </script>
 
 <template>
-  <div class="grid grid-cols-4 gap-2 sm:grid-cols-7">
+  <div class="grid grid-cols-4 gap-2" :class="{ 'sm:grid-cols-7': wide }">
     <button v-for="f in filters" :key="f.key" type="button" class="overflow-hidden rounded-xl border text-left transition"
             :class="modelValue === f.key ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'"
             @click="emit('update:modelValue', f.key)">
