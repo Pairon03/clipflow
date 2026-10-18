@@ -15,7 +15,9 @@ Formato interno (JSON):
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
 import threading
 import wave
 from pathlib import Path
@@ -101,16 +103,69 @@ def load_wav(path: Path) -> np.ndarray:
     return out[:pos]
 
 
+_GPU_ERROR_HINTS = ("cublas", "cudnn", "cuda", "cudart", "nvrtc", "gpu")
+
+
+def _is_gpu_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(h in msg for h in _GPU_ERROR_HINTS)
+
+
+def _register_nvidia_dlls() -> None:
+    """No Windows, deixa visíveis as DLLs da CUDA instaladas via pip (pacotes nvidia-cublas-cu12 etc.)."""
+    if sys.platform != "win32":
+        return
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("nvidia")
+    except (ImportError, ValueError):
+        return
+    if not spec or not spec.submodule_search_locations:
+        return
+    for base in spec.submodule_search_locations:
+        for bin_dir in Path(base).glob("*/bin"):
+            try:
+                os.add_dll_directory(str(bin_dir))
+            except (OSError, AttributeError):
+                pass
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+
+
 def transcribe_whisper(audio_path: Path, duration: float, ctx: JobContext) -> dict:
     model_name = config.get("transcription.model")
     device = config.get("transcription.device")
     compute_type = config.get("transcription.compute_type")
+    audio = load_wav(audio_path)
+    try:
+        return _transcribe(audio, duration, ctx, model_name, device, compute_type)
+    except RuntimeError as exc:
+        if not _is_gpu_error(exc):
+            raise
+        if device == "cuda":
+            raise FatalPipelineError(
+                "A placa de vídeo (CUDA) foi escolhida, mas as bibliotecas da NVIDIA não estão instaladas "
+                f"({exc}). Em Configurações, troque o Dispositivo para 'CPU' (ou 'Automático'), ou instale "
+                "o suporte à GPU: .venv\\Scripts\\pip install nvidia-cublas-cu12 \"nvidia-cudnn-cu12==9.*\""
+            ) from exc
+        # modo automático: a GPU foi detectada mas não está pronta — segue no processador
+        ctx.log.warning("GPU indisponível para o Whisper (%s); transcrevendo no processador (CPU)", exc)
+        with _model_lock:
+            _model_cache.clear()
+        cpu_type = compute_type if compute_type in ("int8", "float32") else "int8"
+        return _transcribe(audio, duration, ctx, model_name, "cpu", cpu_type)
+
+
+def _transcribe(audio: np.ndarray, duration: float, ctx: JobContext, model_name: str, device: str,
+                compute_type: str) -> dict:
     language = config.get("transcription.language") or None
     ctx.log.info("Carregando modelo Whisper %s (%s/%s)", model_name, device, compute_type)
+    if device in ("auto", "cuda"):
+        _register_nvidia_dlls()
     model = _load_model(model_name, device, compute_type)
     ctx.check()
     segments_iter, info = model.transcribe(
-        load_wav(audio_path),
+        audio,
         language=language,
         word_timestamps=True,
         vad_filter=bool(config.get("transcription.vad_filter")),
@@ -135,7 +190,7 @@ def transcribe_whisper(audio_path: Path, duration: float, ctx: JobContext) -> di
         segments.append({"start": words[0]["start"], "end": words[-1]["end"],
                          "text": seg.text.strip(), "words": words})
     ctx.progress(1.0)
-    return {"engine": f"faster-whisper:{model_name}", "language": getattr(info, "language", language or ""),
+    return {"engine": f"faster-whisper:{model_name}:{device}", "language": getattr(info, "language", language or ""),
             "duration": total, "segments": _drop_repetitions(segments)}
 
 

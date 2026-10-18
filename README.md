@@ -73,6 +73,19 @@ necessário, desative o rastreamento de rostos. Ou envie a legenda `.srt` e pule
 
 \*Estimativas de referência do faster-whisper em int8; **não medidas neste projeto** (veja STATUS.md).
 
+### Placa de vídeo NVIDIA (opcional, transcrição bem mais rápida)
+
+No modo **Automático**, o ClipFlow tenta usar a GPU NVIDIA. Se as bibliotecas CUDA não estiverem instaladas,
+ele volta sozinho para o processador (CPU) e registra o motivo no log. Para ativar a GPU, rode na pasta do
+ClipFlow:
+
+```
+.venv\Scripts\pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
+```
+
+Depois reabra o `start-windows.bat`. Suporte à GPU ainda **não testado** em máquina real; se der erro, volte o
+Dispositivo para CPU em Configurações.
+
 ### IA local opcional (Ollama)
 
 1. Instale o [Ollama](https://ollama.com) e rode `ollama pull llama3.2:3b` (≈2 GB; precisa de ~4 GB de RAM livre).

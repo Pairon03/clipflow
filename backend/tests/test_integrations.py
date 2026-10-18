@@ -226,3 +226,51 @@ def test_whisper_receives_decoded_audio(sample_two, tmp_path, monkeypatch):
     assert -1.0 <= audio.min() and audio.max() <= 1.0 and np.abs(audio).max() > 0.05  # há fala
     assert seen["kw"]["word_timestamps"] is True
     assert [w["text"] for w in transcribe.all_words(t)] == ["Olá", "mundo."]
+
+
+def _fake_whisper(fail_on_gpu: bool, calls: list):
+    from types import SimpleNamespace
+
+    class FakeModel:
+        def __init__(self, device):
+            self.device = device
+
+        def transcribe(self, audio, **kw):
+            def gen():
+                if fail_on_gpu and self.device != "cpu":
+                    raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+                w = [SimpleNamespace(word=" Oi.", start=0.5, end=0.9, probability=0.9)]
+                yield SimpleNamespace(start=0.5, end=0.9, text=" Oi.", words=w, no_speech_prob=0.0, avg_logprob=-0.1)
+            return gen(), SimpleNamespace(language="pt", duration=len(audio) / 16000)
+
+    def load(model_name, device, compute_type):
+        calls.append((device, compute_type))
+        return FakeModel(device)
+    return load
+
+
+def test_whisper_auto_falls_back_to_cpu_when_cuda_missing(sample_two, tmp_path, monkeypatch):
+    from app.pipeline import ffmpeg
+
+    wav = tmp_path / "a.wav"
+    ffmpeg.extract_audio(sample_two["video"], wav)
+    calls = []
+    monkeypatch.setattr(transcribe, "_load_model", _fake_whisper(True, calls))
+    config.set_override("transcription.device", "auto")
+    t = transcribe.transcribe_whisper(wav, sample_two["duration"], null_context())
+    assert [c[0] for c in calls] == ["auto", "cpu"]
+    assert t["engine"].endswith(":cpu") and transcribe.all_words(t)[0]["text"] == "Oi."
+
+
+def test_whisper_explicit_cuda_gives_instructions(sample_two, tmp_path, monkeypatch):
+    from app.pipeline import ffmpeg
+
+    wav = tmp_path / "a.wav"
+    ffmpeg.extract_audio(sample_two["video"], wav)
+    monkeypatch.setattr(transcribe, "_load_model", _fake_whisper(True, []))
+    config.set_override("transcription.device", "cuda")
+    try:
+        with pytest.raises(FatalPipelineError, match="CPU"):
+            transcribe.transcribe_whisper(wav, sample_two["duration"], null_context())
+    finally:
+        config.set_override("transcription.device", "auto")
