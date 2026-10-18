@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **95 testes automatizados:
-94 passam, 1 é pulado** (Whisper — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **121 testes automatizados:
+119 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -44,6 +44,10 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Alternar para quem está falando | 🟡 | **experimental**: usa movimento da região da boca. Renderiza corretamente, mas a precisão da troca não foi medida com podcasts reais |
 | Revisão: prévia, ajuste de início/fim, troca por alternativa, correção de legenda | ✅ | correção mantém a sincronização (alinhamento por diff) |
 | Remoção de pausas longas | ✅ | |
+| Ritmo TikTok (corta respirações) e aceleração 1.1x/1.2x | ✅ | corte em uma passada (select/aselect) alinhado aos quadros; sincronia de áudio e vídeo verificada |
+| Gancho de abertura (fala forte antes do início) | ✅ | só quando há frase curta, completa e de destaque; testado com vídeo sintético |
+| Títulos tweet / caixa / citação / variar | ✅ | PNG desenhado com Pillow e sobreposto pelo FFmpeg; quadros renderizados conferidos visualmente, inclusive no layout dividido |
+| Identidade do canal (nome, @, logo) no cartão de tweet | ✅ | upload validado, recorte quadrado de 256 px |
 | Normalização de áudio (loudnorm −14 LUFS) e fades discretos | ✅ | |
 | Rostos pequenos em planos muito abertos | 🟡 | MediaPipe short-range pode falhar; o Haar assume. Se nada for detectado, usa corte central |
 

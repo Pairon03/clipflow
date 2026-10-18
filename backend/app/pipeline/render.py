@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import enhance, ffmpeg, framing, subtitles
+from . import enhance, ffmpeg, framing, overlay, subtitles
 from .context import JobContext
 from .errors import PipelineError
 
 FADE_IN = 0.15
+TITLE_START_S = 4.0  # duração do título no modo "só no início"
 FADE_OUT = 0.25
 MAX_KEYFRAMES = 80
 
@@ -149,7 +150,8 @@ def _select_expr(intervals: list[tuple[float, float]], fps: float) -> str:
 
 def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: int, src_h: int, fps: float,
                       ass_path: Path | None, out_duration: float, speed: float = 1.0,
-                      hook_len: float | None = None) -> str:
+                      hook_len: float | None = None, overlay_input: int | None = None,
+                      overlay_until: float | None = None) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
@@ -172,7 +174,16 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
         parts.append("[vh][ah][vm][am]concat=n=2:v=1:a=1[vc][ac]")
     speed_v = f"setpts=PTS/{speed:g}," if speed != 1.0 else ""
     parts.append(f"[vc]{speed_v}fps={fps:g}[vf]")
-    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vl"))
+    parts.append(layout_filter(plan, src_w, src_h, out_w, out_h, "vf", "vlay"))
+    if overlay_input is not None:
+        # título (PNG transparente do tamanho do vídeo) com entrada suave; some no fim se for "só no início"
+        fade = "fade=t=in:st=0:d=0.3:alpha=1"
+        if overlay_until:
+            fade += f",fade=t=out:st={max(overlay_until - 0.3, 0):.3f}:d=0.3:alpha=1"
+        parts.append(f"[{overlay_input}:v]format=rgba,{fade}[ttl]")
+        parts.append("[vlay][ttl]overlay=0:0:format=auto:shortest=1[vl]")
+    else:
+        parts.append("[vlay]null[vl]")
     post = []
     if ass_path is not None:
         fonts = subtitles.ffmpeg_filter_path(config.FONTS_DIR)
@@ -191,6 +202,13 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
 
 
 # ---------------------------------------------------------------- render
+def storage_remove(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
 def _interp(keyframes: list[tuple[float, float]], t: float) -> float:
     if not keyframes:
         return 0.5
@@ -266,18 +284,37 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
             e = s + 0.04
         out_words.append({"text": w["text"], "start": round(s, 3), "end": round(min(e, out_duration), 3)})
     clip_id = clip["id"]
+    split = plan["layout"] == "split"
+    title_style = options.get("title_style_resolved") or "nenhum"
+    card_png = None
+    if title_style != "nenhum" and options.get("title_card"):
+        # no layout dividido o título vai para a divisão entre as duas pessoas
+        card_png = overlay.render_card(title_style, options["title_card"], work_dir / f"{clip_id}{variant}.title.png",
+                                       out_w, out_h, position="middle" if split else "top")
+    overlay_until = None
+    if card_png and options.get("title_duration") == "inicio":
+        overlay_until = min(TITLE_START_S, out_duration)
     ass_path = None
     if options.get("captions", True) and out_words:
         style = subtitles.resolve_style(options.get("caption_style", "classic"), options.get("caption_colors"))
-        theme = options.get("theme_text") if options.get("theme", True) else None
+        below = None
+        if card_png and split:  # legenda (no meio) desce para baixo do título enquanto ele aparece
+            from PIL import Image
+
+            with Image.open(card_png) as im:
+                bbox = im.getchannel("A").getbbox()
+            if bbox:
+                below = (overlay_until, bbox[3])
         ass_path = subtitles.build_ass(out_words, style, out_w, out_h, sub_dir / f"{clip_id}.ass",
-                                       centered=plan["layout"] == "split", theme=theme)
+                                       centered=split, below=below)
     srt_path = subtitles.build_srt(out_words, sub_dir / f"{clip_id}.srt") if out_words else None
 
     # 4) FFmpeg
     ctx.span(a + (b - a) * 0.35, a + (b - a) * 0.92, ctx.stage)
+    overlay_idx = (2 if hook else 1) if card_png else None
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
-                              hook_len=(hook[1] - hook[0]) if hook else None)
+                              hook_len=(hook[1] - hook[0]) if hook else None,
+                              overlay_input=overlay_idx, overlay_until=overlay_until)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
@@ -285,6 +322,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     args = [
         "-ss", f"{start:.3f}", "-t", f"{end - start + 0.1:.3f}", "-i", str(src),
         *(["-ss", f"{start + hook[0]:.3f}", "-t", f"{hook[1] - hook[0] + 0.1:.3f}", "-i", str(src)] if hook else []),
+        *(["-loop", "1", "-framerate", str(fps), "-t", f"{out_duration + 0.5:.3f}", "-i", str(card_png)]
+          if card_png else []),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", config.get("render.video_preset"), "-crf", str(config.get("render.crf")),
         "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(fps),
@@ -292,6 +331,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "-movflags", "+faststart", "-t", f"{out_duration:.3f}", str(tmp_out),
     ]
     ffmpeg.run(args, ctx=ctx, duration=out_duration, on_progress=ctx.progress)
+    if card_png:
+        storage_remove(card_png)
 
     # 5) verificação de integridade + miniatura
     ctx.span(a + (b - a) * 0.92, b, ctx.stage)
@@ -314,6 +355,6 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "intervals": len(intervals), "removed_pause_s": round((end - start) - tmap.duration * speed, 2),
                         "speed": speed, "pace": options.get("pace", "natural"),
                         "cold_open": [hook[0], hook[1]] if hook else None,
-                        "theme": options.get("theme_text") if ass_path and options.get("theme", True) else None,
+                        "title_style": title_style if card_png else None,
                         "fps": fps, "tracks": plan.get("tracks", [])},
     }

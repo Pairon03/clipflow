@@ -60,19 +60,30 @@ cp config.example.toml config.toml
    legenda, trocar por alternativas ou mudar o enquadramento antes de renderizar.
 7. Baixe cada Short (MP4 + SRT) ou tudo em ZIP — o ZIP inclui um arquivo com os títulos e descrições sugeridos.
 
-### Estilo TikTok: ritmo, gancho, tema e descrições
+### Estilo TikTok: ritmo, gancho, título e descrições
 
 - **Ritmo TikTok** (padrão): corta respirações e silêncios entre as falas, deixando só um respiro curto em cada
   corte. O ritmo **Natural** remove apenas pausas longas. Dá para acelerar levemente (1.1x ou 1.2x) sem mudar o
   tom da voz.
 - **Gancho de abertura:** o vídeo começa com a fala mais forte do trecho e depois volta para o início normal. Só
   acontece quando há uma frase de destaque, curta e completa, mais para frente no corte.
-- **Tema no meio da tela** nos primeiros ~3 segundos, numa faixa roxa.
+- **Título (chamada do vídeo)** no estilo dos cortes profissionais, desenhado por cima do vídeo:
+  - **Tweet**: cartão branco no topo, como um post, com o nome, o @ e o logo do **seu** canal e a frase do canal
+    (padrão: "Você achou a melhor página de cortes do TikTok") — ou um resumo do trecho, se preferir.
+  - **Caixa**: caixa branca com barra roxa ("Fulano explica: …", "Fulano responde: pergunta").
+  - **Citação**: ícone verde de aspas e a frase real do convidado em caixa alta.
+  - **Variar**: cada corte do projeto abre com um estilo diferente (tweet → caixa → citação…). **Nenhum** desliga.
+  - Duração: o vídeo inteiro ou só os primeiros ~4 s. No layout dividido, o título fica na divisão entre as duas
+    pessoas e a legenda desce para baixo dele.
 - **Descrições chamativas:** gancho com emoji, a frase mais forte da fala entre aspas, uma chamada para comentar
   ou seguir, o crédito do episódio e hashtags (inclusive do convidado e do programa, quando o título do vídeo
   segue o formato "CONVIDADO - Programa #123").
 
 Na página do projeto, o painel de estilo refaz os Shorts prontos (vídeo e descrição) sem transcrever de novo.
+
+**Seu canal** (em **Configurações**): nome, @, logo (PNG/JPG, recortado em círculo) e o texto fixo do cartão de
+tweet. O cartão usa sempre a identidade do seu canal — nunca a do convidado — para não parecer uma postagem real de
+outra pessoa. Sem logo, aparecem as iniciais do canal.
 
 ### Dicas para computadores modestos
 
@@ -181,10 +192,12 @@ clipflow-studio/
 │   │   │   ├── metadata.py    títulos, descrição, hashtags
 │   │   │   ├── editing.py     correção de legenda mantendo a sincronização
 │   │   │   ├── concat_bridge.py  ponte MCP com o editor Concat (opcional)
-│   │   │   ├── enhance.py     zoom de ênfase e texto de gancho (motor Concat)
+│   │   │   ├── enhance.py     zoom de ênfase, gancho de abertura e texto de gancho (Concat)
+│   │   │   ├── overlay.py     títulos sobrepostos (tweet, caixa, citação)
+│   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               95 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               121 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -208,7 +221,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 95 testes (~3 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 121 testes (~6 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

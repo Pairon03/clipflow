@@ -96,9 +96,10 @@ def test_full_pipeline_upload_to_shorts(client, sample_two):
 
 def test_caption_sync_matches_speech(client, sample_two, tmp_path):
     """A primeira palavra de cada bloco de legenda deve coincidir com fala no áudio do vídeo final."""
-    clips = db.fetch_all("SELECT * FROM clips WHERE status = 'done' LIMIT 1")
-    c = clips[0]
-    subs = pysubs2.load(str(storage.area_dir("subtitles", c["project_id"]) / f"{c['id']}.ass"))
+    clips = db.fetch_all("SELECT * FROM clips WHERE status = 'done' ORDER BY rowid")
+    c, ass = next((c, a) for c in clips
+                  if (a := storage.area_dir("subtitles", c["project_id"]) / f"{c['id']}.ass").is_file())
+    subs = pysubs2.load(str(ass))
     wav = tmp_path / "out.wav"
     ffmpeg.extract_audio(Path(c["output_path"]), wav)
     with wave.open(str(wav)) as wf:
@@ -109,7 +110,8 @@ def test_caption_sync_matches_speech(client, sample_two, tmp_path):
         seg = x[int(t0 * sr):int(t1 * sr)]
         return float(np.sqrt(np.mean(seg ** 2))) if len(seg) else 0.0
 
-    starts = [e.start / 1000 for e in subs if "\\fad" in e.text and e.style == "Caption"]  # início de cada bloco
+    # início de cada bloco (CaptionLow = legenda deslocada para baixo do título)
+    starts = [e.start / 1000 for e in subs if "\\fad" in e.text and e.style in ("Caption", "CaptionLow")]
     assert len(starts) >= 3
     voiced = [rms(t, t + 0.25) > 0.01 for t in starts]
     assert sum(voiced) / len(voiced) >= 0.9, voiced

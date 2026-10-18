@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import shutil
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .. import config, db, storage
@@ -153,3 +154,77 @@ def youtube_validate(body: InspectIn):
     except ValidationError as exc:
         return {"valid": False, "error": str(exc)}
     return {"valid": True, "video_id": vid}
+
+
+# ------------------------------------------------------------------ identidade do canal (cartão de título)
+@router.get("/branding")
+def get_branding():
+    from ..pipeline import branding
+
+    b = branding.current()
+    return {"name": b["name"], "handle": b["handle"], "has_avatar": b["avatar"] is not None,
+            "configured": b["configured"], "tweet_text": config.get("branding.tweet_text"),
+            "tweet_mode": config.get("branding.tweet_mode")}
+
+
+@router.put("/branding/avatar")
+async def put_avatar(request: Request):
+    from ..pipeline import branding
+
+    data = await request.body()
+    if not data or len(data) > 5 * 1024 * 1024:
+        raise HTTPException(413, "Imagem vazia ou maior que 5 MB")
+    try:
+        branding.save_avatar(data)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    return {"ok": True}
+
+
+@router.get("/branding/avatar")
+def get_avatar():
+    from ..pipeline import branding
+
+    p = branding.avatar_path()
+    if not p.is_file():
+        raise HTTPException(404, "Sem avatar")
+    return FileResponse(p, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.delete("/branding/avatar")
+def delete_avatar():
+    from ..pipeline import branding
+
+    storage.remove_quietly(branding.avatar_path())
+    return {"ok": True}
+
+
+_PREVIEW_CARD = {"lead": "Craque Neto respondeu:", "guest": "Craque Neto", "quote": "O maior erro foi brigar com o treinador",
+                 "question": "Qual foi o maior erro da sua carreira?",
+                 "headline": "Craque Neto respondeu: “O maior erro foi brigar com o treinador”"}
+
+
+@router.get("/branding/preview")
+def title_preview(style: str = "tweet"):
+    """Prévia (PNG) de um estilo de título sobre fundo escuro, com um texto de exemplo."""
+    import io
+
+    from PIL import Image
+
+    from ..pipeline import overlay
+
+    if style not in overlay.STYLES or style == "nenhum":
+        raise HTTPException(422, "Estilo inválido")
+    tmp = storage.root() / "tmp" / f"preview_{style}.png"
+    if not overlay.render_card(style, _PREVIEW_CARD, tmp, 1080, 1920):
+        raise HTTPException(422, "Sem texto para este estilo")
+    card = Image.open(tmp)
+    bg = Image.new("RGBA", card.size, (40, 40, 48, 255))
+    bg.alpha_composite(card)
+    crop = bg.crop((0, 0, 1080, 760)).convert("RGB").resize((540, 380))
+    buf = io.BytesIO()
+    crop.save(buf, "JPEG", quality=85)
+    storage.remove_quietly(tmp)
+    from fastapi.responses import Response
+
+    return Response(buf.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})

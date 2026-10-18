@@ -5,6 +5,7 @@ import { Youtube, Upload, Link2, Loader2, FileVideo, ShieldCheck, Sparkles, Capt
 import { api, uploadFile, fileUrl } from '../api'
 import { fmtBytes, fmtDuration, toast, LAYOUT_LABELS, CAPTION_LABELS } from '../utils'
 import ProgressBar from '../components/ProgressBar.vue'
+import TitleStylePicker from '../components/TitleStylePicker.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -91,7 +92,8 @@ const form = reactive({
   zoom: true,
   pace: 'tiktok',
   speed: 1.0,
-  theme: true,
+  title_style: 'tweet',
+  title_duration: 'inteiro',
   cold_open: true,
   rightsConfirmed: false,
   rightsBasis: 'own',
@@ -129,7 +131,8 @@ async function submit(force = false) {
         style: form.style, caption_style: form.caption_style, layout: form.layout,
         captions: form.captions, trim_silence: form.trim_silence, review: form.review,
         engine: form.engine, hook: form.hook, zoom: form.zoom,
-        pace: form.pace, speed: form.speed, theme: form.theme, cold_open: form.cold_open,
+        pace: form.pace, speed: form.speed, title_style: form.title_style, title_duration: form.title_duration,
+        cold_open: form.cold_open,
       },
       force,
     }
@@ -347,7 +350,16 @@ onMounted(async () => {
             </div>
             <div class="mt-3 space-y-2 text-sm">
               <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Gancho: começar pela fala mais forte</span><input v-model="form.cold_open" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
-              <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Tema no meio da tela no início</span><input v-model="form.theme" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+            </div>
+          </div>
+
+          <div>
+            <span class="label">Título (chamada do vídeo)</span>
+            <TitleStylePicker v-model="form.title_style" />
+            <div v-if="form.title_style !== 'nenhum'" class="mt-3 flex flex-wrap items-center gap-2">
+              <span class="text-xs text-ink-400">Mostrar:</span>
+              <button class="chip py-1.5" :class="{ 'chip-active': form.title_duration === 'inteiro' }" @click="form.title_duration = 'inteiro'">Vídeo inteiro</button>
+              <button class="chip py-1.5" :class="{ 'chip-active': form.title_duration === 'inicio' }" @click="form.title_duration = 'inicio'">Só no início</button>
             </div>
           </div>
 

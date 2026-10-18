@@ -120,7 +120,7 @@ def test_filtergraph_has_no_shell_metachar_injection():
 
 
 def test_tiktok_pace_speed_and_cold_open_render(sample_two, tmp_path):
-    """Ritmo TikTok + 1.1x + gancho: duração bate com a linha do tempo e o tema entra no ASS."""
+    """Ritmo TikTok + 1.1x + gancho: duração bate com a linha do tempo e o título (tweet) é sobreposto."""
     import pysubs2
 
     from app.pipeline import transcribe
@@ -134,7 +134,8 @@ def test_tiktok_pace_speed_and_cold_open_render(sample_two, tmp_path):
     natural = render.render_clip(src, info, clip | {"id": "ffffffffffff"}, words, {"pace": "natural"},
                                  tmp_path, tmp_path, tmp_path, null_context())
     fast = render.render_clip(src, info, clip, words,
-                              {"pace": "tiktok", "speed": 1.1, "cold_open": True, "theme_text": "TEMA\nDO VÍDEO"},
+                              {"pace": "tiktok", "speed": 1.1, "cold_open": True, "title_style_resolved": "tweet",
+                               "title_card": {"headline": "Resumo do trecho"}},
                               tmp_path, tmp_path, tmp_path, null_context())
     ri = fast["render_info"]
     assert ri["cold_open"] and ri["speed"] == 1.1 and ri["removed_pause_s"] > natural["render_info"]["removed_pause_s"]
@@ -142,8 +143,16 @@ def test_tiktok_pace_speed_and_cold_open_render(sample_two, tmp_path):
     main_natural = natural["duration"]
     assert fast["duration"] < main_natural / 1.1 + hook_len + 0.3  # cortou respirações além da aceleração
     subs = pysubs2.load(str(tmp_path / "eeeeeeeeeeee.ass"))
-    theme = [e for e in subs if e.style == "Theme"]
-    assert theme and "TEMA\\NDO VÍDEO" in theme[0].text and theme[0].start == 0
+    assert not [e for e in subs if e.style == "Theme"]  # o título agora é imagem, não texto no ASS
+    assert ri["title_style"] == "tweet"
+    assert not list(tmp_path.glob("*.title.png"))  # PNG temporário do título é apagado
+    # o cartão branco aparece no topo do vídeo
+    frame = tmp_path / "frame.png"
+    ffmpeg.run(["-ss", "1.5", "-i", fast["output_path"], "-frames:v", "1", str(frame)])
+    from PIL import Image
+    img = Image.open(frame).convert("L")
+    top = img.crop((200, int(1920 * 0.085) + 20, 880, int(1920 * 0.085) + 60))
+    assert sum(top.getdata()) / (top.width * top.height) > 200
     first_caption = min((e for e in subs if e.style == "Caption"), key=lambda e: e.start)
     assert first_caption.start / 1000 < 0.5  # o gancho já começa falando
 

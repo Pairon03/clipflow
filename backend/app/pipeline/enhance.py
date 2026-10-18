@@ -118,6 +118,10 @@ def pick_cold_open(words: list[dict], clip_start: float, clip_end: float) -> tup
 
     if clip_end - clip_start < 12 or len(words) < 6:
         return None
+    from .textutil import keywords
+
+    # palavras que mais aparecem no corte = assunto; frases com elas resumem melhor o trecho
+    topic = {norm(k) for k in keywords(" ".join(w["text"] for w in words), top=6)}
     best, best_score = None, 0.0
     for s in build_sentences(words, max_sentence_s=COLD_OPEN_MAX_S):
         dur = s.end - s.start
@@ -130,11 +134,12 @@ def pick_cold_open(words: list[dict], clip_start: float, clip_end: float) -> tup
         score = _group_score(text)
         if text.rstrip().endswith("!"):
             score += 0.5
+        score += 0.4 * sum(1 for t in text.split() if norm(clean_token(t)) in topic)
         if clean_token(s.words[0]["text"]) in {"e", "mas", "aí", "então", "porque", "que"}:
             score -= 1.0  # começa pendurado no que veio antes
         if score > best_score:
             best, best_score = (s.start, s.end), score
-    if best is None or best_score < 1.0:
+    if best is None or best_score < 0.6:
         return None
     a = max(best[0] - clip_start - 0.05, 0.0)
     b = min(best[1] - clip_start + 0.15, clip_end - clip_start)

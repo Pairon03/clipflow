@@ -1,13 +1,36 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { CheckCircle2, XCircle, Save, RefreshCw, Cpu, Brain, ScanFace, Film, Gauge } from 'lucide-vue-next'
-import { api } from '../api'
+import { CheckCircle2, XCircle, Save, RefreshCw, Cpu, Brain, ScanFace, Film, Gauge, BadgeCheck, Upload, Trash2 } from 'lucide-vue-next'
+import { api, auth, fileUrl } from '../api'
 import { toast } from '../utils'
 
 const status = ref(null)
 const settings = ref(null)
 const form = ref({})
 const saving = ref(false)
+const previewKey = ref(Date.now())
+const hasAvatar = ref(false)
+async function loadBranding() {
+  const b = await api('/api/branding').catch(() => null)
+  hasAvatar.value = !!b?.has_avatar
+}
+async function uploadAvatar(file) {
+  if (!file) return
+  try {
+    const headers = { 'Content-Type': 'application/octet-stream' }
+    if (auth.token) headers.Authorization = `Bearer ${auth.token}`
+    const res = await fetch('/api/branding/avatar', { method: 'PUT', headers, body: file })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Falha no envio')
+    toast('Logo atualizada', 'success')
+    hasAvatar.value = true
+    previewKey.value = Date.now()
+  } catch (e) { toast(e.message, 'error') }
+}
+async function removeAvatar() {
+  await api('/api/branding/avatar', { method: 'DELETE' }).catch(() => {})
+  hasAvatar.value = false
+  previewKey.value = Date.now()
+}
 
 async function load() {
   const [s, cfg] = await Promise.all([api('/api/system/status'), api('/api/settings')]).catch((e) => { toast(e.message, 'error'); return [null, null] })
@@ -22,7 +45,7 @@ async function load() {
     form.value = f
   }
 }
-onMounted(load)
+onMounted(() => { load(); loadBranding() })
 
 async function save() {
   saving.value = true
@@ -30,6 +53,7 @@ async function save() {
     settings.value = await api('/api/settings', { method: 'PUT', body: { values: form.value } })
     toast('Configurações salvas', 'success')
     status.value = await api('/api/system/status')
+    previewKey.value = Date.now()
   } catch (e) {
     toast(e.message, 'error')
   } finally {
@@ -93,6 +117,39 @@ const models = [
     </section>
 
     <form v-if="settings" class="grid gap-6 lg:grid-cols-2" @submit.prevent="save">
+      <section class="card space-y-4 p-6 lg:col-span-2">
+        <h2 class="flex items-center gap-2 font-display text-lg font-semibold text-white"><BadgeCheck class="h-5 w-5 text-brand-400" /> Seu canal (título estilo tweet)</h2>
+        <div class="grid gap-6 md:grid-cols-2">
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div><label class="label" for="bname">Nome do canal</label><input id="bname" v-model="form['branding.channel_name']" class="input" maxlength="40" placeholder="Cortes do Pairon" /></div>
+              <div><label class="label" for="bhandle">@ do canal</label><input id="bhandle" v-model="form['branding.channel_handle']" class="input" maxlength="40" placeholder="@cortesdopairon" /></div>
+            </div>
+            <div>
+              <span class="label">Texto do tweet</span>
+              <div class="mb-2 flex gap-2">
+                <button type="button" class="chip py-1.5" :class="{ 'chip-active': form['branding.tweet_mode'] === 'fixo' }" @click="form['branding.tweet_mode'] = 'fixo'">Frase fixa do canal</button>
+                <button type="button" class="chip py-1.5" :class="{ 'chip-active': form['branding.tweet_mode'] === 'resumo' }" @click="form['branding.tweet_mode'] = 'resumo'">Resumo de cada corte</button>
+              </div>
+              <input v-if="form['branding.tweet_mode'] === 'fixo'" v-model="form['branding.tweet_text']" class="input" maxlength="140" placeholder="Você achou a melhor página de cortes do TikTok" />
+            </div>
+            <div>
+              <span class="label">Logo (aparece redonda no cartão)</span>
+              <div class="flex items-center gap-3">
+                <img v-if="hasAvatar" :src="fileUrl(`/api/branding/avatar?k=${previewKey}`)" class="h-14 w-14 rounded-full object-cover ring-1 ring-ink-600" alt="" />
+                <label class="btn-secondary cursor-pointer text-xs"><Upload class="h-3.5 w-3.5" /> Enviar logo <input type="file" accept="image/png,image/jpeg,image/webp" class="hidden" @change="uploadAvatar($event.target.files[0])" /></label>
+                <button v-if="hasAvatar" type="button" class="btn-ghost text-xs" @click="removeAvatar"><Trash2 class="h-3.5 w-3.5" /> Remover</button>
+              </div>
+            </div>
+            <p class="text-xs text-ink-500">O cartão usa sempre a identidade do <b>seu</b> canal — nunca a do convidado — para não parecer uma postagem real de outra pessoa. Salve para atualizar a prévia.</p>
+          </div>
+          <div>
+            <span class="label">Prévia</span>
+            <img :src="fileUrl(`/api/branding/preview?style=tweet&k=${previewKey}`)" class="w-full rounded-xl ring-1 ring-ink-700" alt="Prévia do cartão" />
+          </div>
+        </div>
+      </section>
+
       <section class="card space-y-4 p-6">
         <h2 class="flex items-center gap-2 font-display text-lg font-semibold text-white"><Brain class="h-5 w-5 text-brand-400" /> Transcrição</h2>
         <div>

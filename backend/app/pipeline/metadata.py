@@ -138,7 +138,31 @@ def heuristic(text: str, source_title: str, category: str) -> dict:
         lines.append(f"🎙️ {source_title}")
     description = "\n\n".join(lines) + "\n\n" + " ".join(tags)
     return {"titles": uniq[:3], "description": description, "hashtags": tags,
-            "keywords": kws, "short_text": hook}
+            "keywords": kws, "short_text": hook, "card": card_parts(sents, kws, guest, category)}
+
+
+_LEADS = {
+    "História": "{g} relembrou:", "Opinião": "{g} deu a real:", "Pergunta e resposta": "{g} respondeu:",
+    "Educativo": "{g} explica:", "Emocionante": "{g} se abriu:", "Curiosidade": "{g} revelou:",
+    "Frase de impacto": "{g} mandou essa:",
+}
+_LEADS_NO_GUEST = {
+    "História": "A história:", "Opinião": "Opinião sincera:", "Pergunta e resposta": "A resposta:",
+    "Educativo": "Entenda:", "Emocionante": "Que momento:", "Curiosidade": "Você sabia?",
+    "Frase de impacto": "Frase forte:",
+}
+
+
+def card_parts(sents: list[str], kws: list[str], guest: str | None, category: str) -> dict:
+    """Partes do título sobreposto (chamada, frase real e pergunta), sempre a partir da própria fala."""
+    lead = (_LEADS.get(category, "{g} diz:").format(g=guest) if guest
+            else _LEADS_NO_GUEST.get(category, "Escuta essa:"))
+    affirm = [s for s in sents if not s.endswith("?")]
+    quote = _best_quote(affirm, kws, max_chars=80) or _best_quote(sents, kws, max_chars=80)
+    questions = [s for s in sents if s.endswith("?") and len(s) <= 80]
+    quote = quote.rstrip(".") if quote else None
+    return {"lead": lead, "quote": quote, "question": questions[0] if questions else None, "guest": guest,
+            "headline": f"{lead} “{quote}”" if quote else lead}
 
 
 def _quotes_ok(title: str, text: str) -> bool:
@@ -171,9 +195,9 @@ def generate(text: str, source_title: str, category: str) -> dict:
         base["hashtags"] = tags
         base["description"] = desc.strip() + (f"\n\n🎙️ {source_title}" if source_title else "") \
             + "\n\n" + " ".join(tags)
-    tema = data.get("tema")
-    if isinstance(tema, str) and 3 <= len(tema.strip()) <= 42:
-        base["theme"] = tema.strip()
+    manchete = data.get("manchete")
+    if isinstance(manchete, str) and 10 <= len(manchete.strip()) <= 110 and _quotes_ok(manchete, text):
+        base["card"] = dict(base.get("card") or {}) | {"headline": manchete.strip()}
     kws = [k for k in (data.get("palavras_chave") or []) if isinstance(k, str)]
     if kws:
         base["keywords"] = list(dict.fromkeys([k.strip().lower() for k in kws] + base["keywords"]))[:10]

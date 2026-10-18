@@ -56,6 +56,12 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "verify_decode": True,
     },
     "concat": {"path": ""},
+    "branding": {
+        "channel_name": "",
+        "channel_handle": "",
+        "tweet_text": "Você achou a melhor página de cortes do TikTok",
+        "tweet_mode": "fixo",   # fixo: usa tweet_text | resumo: resume o trecho de cada corte
+    },
 }
 
 # Chaves que a interface pode alterar em tempo de execução, com o tipo esperado.
@@ -78,6 +84,10 @@ EDITABLE: dict[str, type] = {
     "render.face_tracking": bool,
     "render.verify_decode": bool,
     "concat.path": str,
+    "branding.channel_name": str,
+    "branding.channel_handle": str,
+    "branding.tweet_text": str,
+    "branding.tweet_mode": str,
 }
 
 ALLOWED_VALUES: dict[str, set] = {
@@ -85,6 +95,7 @@ ALLOWED_VALUES: dict[str, set] = {
     "transcription.device": {"auto", "cpu", "cuda"},
     "transcription.compute_type": {"int8", "int8_float16", "float16", "float32"},
     "render.video_preset": {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"},
+    "branding.tweet_mode": {"fixo", "resumo"},
 }
 
 _lock = threading.Lock()
@@ -164,6 +175,10 @@ def coerce(key: str, value: Any) -> Any:
         raise ValueError(f"Valor não permitido para {key}: {v}")
     if key == "ai.ollama_url" and not (v.startswith("http://") or v.startswith("https://")):
         raise ValueError("URL do Ollama deve começar com http:// ou https://")
+    if key in ("branding.channel_name", "branding.channel_handle") and len(v) > 40:
+        raise ValueError("Nome/@ do canal muito longo (máx. 40 caracteres)")
+    if key == "branding.tweet_text" and len(v) > 140:
+        raise ValueError("Frase do tweet muito longa (máx. 140 caracteres)")
     if key == "concat.path" and v:
         p = Path(v)
         if not (p.is_file() and p.name.lower().startswith("concat")):

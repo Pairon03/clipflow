@@ -8,6 +8,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import ClipEditor from '../components/ClipEditor.vue'
 import ClipResult from '../components/ClipResult.vue'
+import TitleStylePicker from '../components/TitleStylePicker.vue'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -18,7 +19,7 @@ const showLog = ref(false)
 const acting = ref(false)
 const showAlternatives = ref(false)
 const reselect = ref({ count: 5, min_duration: 30, max_duration: 60 })
-const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, theme: true })
+const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, title_style: 'tweet', title_duration: 'inteiro' })
 let timer
 
 const active = computed(() => p.value && ACTIVE.includes(p.value.status))
@@ -42,7 +43,8 @@ async function loadLog() {
 watch(() => p.value?.options, (o) => {
   if (o) {
     reselect.value = { count: o.count, min_duration: o.min_duration, max_duration: o.max_duration }
-    edit.value = { pace: o.pace || 'natural', speed: o.speed || 1.0, cold_open: !!o.cold_open, theme: o.theme !== false }
+    edit.value = { pace: o.pace || 'natural', speed: o.speed || 1.0, cold_open: !!o.cold_open,
+      title_style: o.title_style || (o.theme === false ? 'nenhum' : 'tweet'), title_duration: o.title_duration || 'inteiro' }
   }
 }, { immediate: true })
 
@@ -170,7 +172,14 @@ async function remove() {
             </div>
           </div>
           <label class="flex items-center gap-2 pb-2 text-sm text-ink-200"><input v-model="edit.cold_open" type="checkbox" class="h-4 w-4 accent-violet-500" /> Gancho no início</label>
-          <label class="flex items-center gap-2 pb-2 text-sm text-ink-200"><input v-model="edit.theme" type="checkbox" class="h-4 w-4 accent-violet-500" /> Tema no meio da tela</label>
+          <div class="w-full">
+            <span class="label">Título (chamada do vídeo)</span>
+            <TitleStylePicker v-model="edit.title_style" compact />
+            <div v-if="edit.title_style !== 'nenhum'" class="mt-2 flex gap-2">
+              <button class="chip py-1.5" :class="{ 'chip-active': edit.title_duration === 'inteiro' }" @click="edit.title_duration = 'inteiro'">Vídeo inteiro</button>
+              <button class="chip py-1.5" :class="{ 'chip-active': edit.title_duration === 'inicio' }" @click="edit.title_duration = 'inicio'">Só no início</button>
+            </div>
+          </div>
           <button class="btn-primary ml-auto" :disabled="!canEdit || acting" @click="applyEditAndRender"><Wand2 class="h-4 w-4" /> {{ done.length ? 'Refazer Shorts com este estilo' : 'Salvar estilo' }}</button>
         </div>
         <p class="mt-2 text-xs text-ink-500">Refaz os vídeos e também as descrições, sem transcrever de novo.</p>

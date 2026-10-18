@@ -157,9 +157,10 @@ def test_real_concat(sample_two, tmp_path):
         config.reload()
 
 
-def _run_engine_concat(client, sample, wait, create):
+def _run_engine_concat(client, sample, wait, create, title_style="nenhum"):
+    # o texto de gancho do Concat só entra quando não há título sobreposto
     pid = create(client, sample, {"count": 1, "min_duration": 15, "max_duration": 30, "engine": "concat",
-                                  "layout": "follow"}, force=True).json()["id"]
+                                  "layout": "follow", "title_style": title_style}, force=True).json()["id"]
     p = wait(client, pid)
     assert p["status"] == "completed", p.get("error")
     return db.fetch_one("SELECT * FROM clips WHERE project_id = ? AND status = 'done'", (pid,))
@@ -200,3 +201,17 @@ def test_render_engine_concat_falls_back_to_ffmpeg(fake_concat, sample_moving, m
     assert c["render_info"]["engine"] == "ffmpeg"
     assert "Concat falhou" in c["render_info"]["note"]
     assert Path(c["output_path"]).is_file()
+
+
+def test_render_engine_concat_with_title_card_skips_hook(fake_concat, sample_moving):
+    """Com título sobreposto (tweet), o Concat não adiciona o texto de gancho por cima dele."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from test_api_e2e import create, wait
+
+    with TestClient(create_app(start_worker=True)) as client:
+        c = _run_engine_concat(client, sample_moving, wait, create, title_style="tweet")
+    info = c["render_info"]
+    assert info["engine"] == "concat" and info["hook"] is None and info["title_style"] == "tweet"
+    assert "title_add" not in [x["tool"] for x in calls(fake_concat[1])]

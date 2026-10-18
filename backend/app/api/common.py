@@ -17,6 +17,7 @@ STYLES = {
 }
 CAPTION_STYLES = {"classic", "neon", "minimal", "impact"}
 LAYOUTS = {"auto", "follow", "speaker", "split", "fit", "center", "manual"}
+TITLE_STYLES = {"tweet", "caixa", "citacao", "variar", "nenhum"}
 PACES = {"natural", "tiktok"}  # tiktok: corta respirações e silêncios entre falas
 ENGINES = {"ffmpeg", "concat"}  # concat: zoom de ênfase, texto de gancho e exportação pelo Concat
 MAX_CLIP_SECONDS = 180  # limite atual do YouTube Shorts
@@ -82,6 +83,14 @@ def validate_options(raw: dict | None) -> dict:
         raise HTTPException(422, "Velocidade inválida")
     if not 1.0 <= speed <= 1.25:
         raise HTTPException(422, "Velocidade deve ficar entre 1.0x e 1.25x")
+    title_style = raw.get("title_style")
+    if title_style is None:  # compatibilidade com o antigo "theme"
+        title_style = "tweet" if raw.get("theme", True) else "nenhum"
+    if title_style not in TITLE_STYLES:
+        raise HTTPException(422, "Estilo de título inválido")
+    title_duration = raw.get("title_duration") or "inteiro"
+    if title_duration not in {"inteiro", "inicio"}:
+        raise HTTPException(422, "Duração do título inválida")
     engine = raw.get("engine") or "ffmpeg"
     if engine not in ENGINES:
         raise HTTPException(422, "Motor de edição inválido")
@@ -115,7 +124,8 @@ def validate_options(raw: dict | None) -> dict:
         "zoom": bool(raw.get("zoom", True)),
         "pace": pace,
         "speed": speed,
-        "theme": bool(raw.get("theme", True)),
+        "title_style": title_style,
+        "title_duration": title_duration,
         "cold_open": bool(raw.get("cold_open", True)),
     }
 

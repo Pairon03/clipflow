@@ -105,7 +105,7 @@ METADATA_SYSTEM = (
 def metadata(transcript_text: str, source_title: str) -> dict | None:
     prompt = (
         f"Vídeo de origem: {source_title}\nTranscrição do corte:\n\"\"\"{transcript_text[:3000]}\"\"\"\n\n"
-        'Formato: {"titulos": ["", "", ""], "tema": "tema do corte em até 5 palavras", '
+        'Formato: {"titulos": ["", "", ""], "manchete": "resumo do trecho em 3ª pessoa, até 100 caracteres", '
         '"descricao": "gancho + curiosidade + chamada, até 3 linhas", '
         '"hashtags": ["#..."], "palavras_chave": ["..."], "texto_curto": "1 frase para publicação"}'
     )

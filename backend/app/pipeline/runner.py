@@ -199,13 +199,15 @@ def _render_one(src: Path, info: dict, clip: dict, words: list[dict], opts: dict
     return result
 
 
-def _theme_for(meta: dict) -> str | None:
-    """Tema do corte (meio da tela no início): o da IA local, se houver, senão o melhor título."""
-    from . import enhance
+def _clip_options(opts: dict, meta: dict, clip: dict, index: int | None) -> dict:
+    """Opções de render de um corte: estilo do título já resolvido (inclusive o "variar") e o texto dele."""
+    from . import overlay
 
-    if meta.get("theme"):
-        return enhance.theme_text([meta["theme"]])
-    return enhance.theme_text(meta.get("titles") or [])
+    style = opts.get("title_style")
+    if style is None:  # projetos antigos: "theme" ligado vira o cartão padrão
+        style = "tweet" if opts.get("theme", True) else "nenhum"
+    return opts | {"title_style_resolved": overlay.resolve_style(style, clip["id"], index),
+                   "title_card": meta.get("card") or {}}
 
 
 def _concat_enhancements(words_out: list[dict], duration: float, layout: str, opts: dict,
@@ -213,8 +215,9 @@ def _concat_enhancements(words_out: list[dict], duration: float, layout: str, op
     from . import enhance
 
     hook = None
-    if opts.get("hook", True) and opts.get("theme", True):
-        hook = opts.get("theme_text") or enhance.theme_text(titles)
+    # com o cartão de título já desenhado no vídeo base, o Concat não adiciona outro texto por cima
+    if opts.get("hook", True) and opts.get("title_style_resolved", "nenhum") == "nenhum":
+        hook = enhance.theme_text(titles)
     zooms = []
     # no layout dividido o zoom cortaria os dois rostos; fica desligado
     if opts.get("zoom", True) and layout != "split":
@@ -291,6 +294,9 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
     work_dir = storage.area_dir("clips", pid)
     done, failed = 0, 0
     n = len(clips)
+    # posição fixa de cada corte no projeto (o estilo "variar" não muda ao refazer só um corte)
+    order = [c["id"] for c in db.fetch_all(
+        "SELECT id FROM clips WHERE project_id = ? AND (selected = 1 OR status = 'done') ORDER BY start", (pid,))]
     for i, clip in enumerate(clips):
         ctx.check()
         ctx.span(i / n, (i + 1) / n, f"Renderizando corte {i + 1} de {n}")
@@ -299,7 +305,7 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         last_exc: Exception | None = None
         text = " ".join(w["text"] for w in words)
         meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
-        clip_opts = opts | {"theme_text": _theme_for(meta)}
+        clip_opts = _clip_options(opts, meta, clip, order.index(clip["id"]) if clip["id"] in order else i)
         for attempt in range(2):
             try:
                 result = _render_one(src, info, clip, words, clip_opts, meta, out_dir, sub_dir, work_dir, ctx)
@@ -374,7 +380,10 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
     meta = {"titles": clip["titles"]} if clip["titles"] else metadata.generate(
         " ".join(w["text"] for w in words), p["source_title"] or p["name"], clip["category"])
     titles = meta["titles"]
-    opts = opts | {"theme_text": _theme_for(meta)}
+    if not meta.get("card"):
+        meta = meta | {"card": metadata.generate(" ".join(w["text"] for w in words),
+                                                 p["source_title"] or p["name"], clip["category"]).get("card")}
+    opts = _clip_options(opts, meta, clip, None)
     hook, zoom_keys, _ = _concat_enhancements(clean["words_out"], clean["duration"],
                                               clean["render_info"]["layout"], opts, titles)
     project_dir = concat_bridge.build_project(
