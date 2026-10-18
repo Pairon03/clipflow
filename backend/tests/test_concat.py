@@ -133,6 +133,20 @@ def test_real_concat(sample_two, tmp_path):
         out = concat_bridge.build_project(exe, tmp_path / "proj", "real", sample_two["video"], words,
                                           "classic", 12, 1080, 1920)
         assert out.is_dir() and any(out.iterdir())
+        # gancho + zoom + exportação pelo próprio Concat
+        from app.pipeline import enhance, ffmpeg
+
+        exported = tmp_path / "concat_out.mp4"
+        keys = enhance.zoom_keyframes([(1.0, 2.5)], 10.0)
+        concat_bridge.build_project(exe, tmp_path / "proj", "real2", sample_two["video"], words, "impact", 12,
+                                    1080, 1920, hook="O maior erro\nno começo", zoom_keys=keys, export_to=exported)
+        info = ffmpeg.probe(exported)
+        assert (info.width, info.height, info.video_codec) == (1080, 1920, "h264")
+        with concat_bridge.ConcatClient(exe, [tmp_path]) as c2:
+            c2.initialize()
+            c2.call("project_open", {"path": str(tmp_path / "proj" / "real2")})
+            full = json.dumps(c2.call("project_get", {"path": str(tmp_path / "proj" / "real2")}))
+        assert "O maior erro" in full and '"scale"' in full
         with concat_bridge.ConcatClient(exe, [tmp_path]) as c:
             c.initialize()
             c.call("project_open", {"path": str(out)})
@@ -141,3 +155,48 @@ def test_real_concat(sample_two, tmp_path):
         assert "constância" in text or "CONSTÂNCIA" in text or "segredo" in text, text[:2000]
     finally:
         config.reload()
+
+
+def _run_engine_concat(client, sample, wait, create):
+    pid = create(client, sample, {"count": 1, "min_duration": 15, "max_duration": 30, "engine": "concat",
+                                  "layout": "follow"}, force=True).json()["id"]
+    p = wait(client, pid)
+    assert p["status"] == "completed", p.get("error")
+    return db.fetch_one("SELECT * FROM clips WHERE project_id = ? AND status = 'done'", (pid,))
+
+
+def test_render_engine_concat_with_hook_and_zoom(fake_concat, sample_moving):
+    """Motor Concat: vídeo base pelo FFmpeg, gancho + zooms + legendas no Concat, exportado pelo Concat."""
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.pipeline import ffmpeg
+    from test_api_e2e import create, wait
+
+    with TestClient(create_app(start_worker=True)) as client:
+        c = _run_engine_concat(client, sample_moving, wait, create)
+    info = c["render_info"]
+    assert info["engine"] == "concat" and info["hook"]
+    sent = calls(fake_concat[1])
+    tools = [x["tool"] for x in sent]
+    assert "export_start" in tools and "title_add" in tools
+    hook_call = next(x for x in sent if x["tool"] == "title_add")
+    assert hook_call["args"]["start"] == 0.0 and hook_call["args"]["style"]["content"] == info["hook"]
+    assert tools.count("keyframe_set") == 4 * info["zooms"]
+    out = ffmpeg.probe(c["output_path"])
+    assert (out.width, out.height, out.video_codec, out.audio_codec) == (1080, 1920, "h264", "aac")
+    assert Path(info["concat_project"]).is_dir()
+
+
+def test_render_engine_concat_falls_back_to_ffmpeg(fake_concat, sample_moving, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from test_api_e2e import create, wait
+
+    monkeypatch.setenv("FAKE_CONCAT_FAIL_EXPORT", "1")
+    with TestClient(create_app(start_worker=True)) as client:
+        c = _run_engine_concat(client, sample_moving, wait, create)
+    assert c["render_info"]["engine"] == "ffmpeg"
+    assert "Concat falhou" in c["render_info"]["note"]
+    assert Path(c["output_path"]).is_file()

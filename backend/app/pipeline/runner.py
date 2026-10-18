@@ -168,6 +168,90 @@ def select_clips(pid: str, transcript: dict, opts: dict, ctx: JobContext | None 
 
 
 # ================================================================ RENDER
+def _render_one(src: Path, info: dict, clip: dict, words: list[dict], opts: dict, meta: dict,
+                out_dir: Path, sub_dir: Path, work_dir: Path, ctx: JobContext) -> dict:
+    """Renderiza com o motor escolhido. Se o Concat falhar ou não existir, usa o FFmpeg e registra o motivo."""
+    if opts.get("engine") == "concat":
+        from . import concat_bridge
+
+        exe = concat_bridge.find_executable()
+        if not exe:
+            ctx.log.warning("Motor Concat escolhido, mas o Concat não foi encontrado; usando FFmpeg")
+            note = "Concat não encontrado; renderizado com FFmpeg"
+        else:
+            span = ctx._span
+            try:
+                return _render_with_concat(exe, src, info, clip, words, opts, meta, out_dir, sub_dir, work_dir, ctx)
+            except concat_bridge.McpError as exc:
+                ctx.log.warning("Concat falhou em %s (%s); usando FFmpeg", clip["id"], exc)
+                note = f"Concat falhou ({str(exc)[:120]}); renderizado com FFmpeg"
+                ctx.span(span[0], span[1], ctx.stage)
+        result = render.render_clip(src, info, clip, words, opts, out_dir, sub_dir, work_dir, ctx)
+        ri = result["render_info"]
+        ri["engine"] = "ffmpeg"
+        ri["note"] = f"{ri['note']} · {note}" if ri.get("note") else note
+        return result
+    result = render.render_clip(src, info, clip, words, opts, out_dir, sub_dir, work_dir, ctx)
+    result["render_info"]["engine"] = "ffmpeg"
+    return result
+
+
+def _concat_enhancements(words_out: list[dict], duration: float, layout: str, opts: dict,
+                         titles: list[str]) -> tuple[str | None, list[dict], int]:
+    from . import enhance
+
+    hook = enhance.hook_text(titles) if opts.get("hook", True) else None
+    zooms = []
+    # no layout dividido o zoom cortaria os dois rostos; fica desligado
+    if opts.get("zoom", True) and layout != "split":
+        zooms = enhance.pick_zooms(words_out, duration, skip_start=enhance.HOOK_DURATION_S if hook else 0.5)
+    return hook, enhance.zoom_keyframes(zooms, duration), len(zooms)
+
+
+def _render_with_concat(exe: Path, src: Path, info: dict, clip: dict, words: list[dict], opts: dict, meta: dict,
+                        out_dir: Path, sub_dir: Path, work_dir: Path, ctx: JobContext) -> dict:
+    from . import concat_bridge
+
+    a, b = ctx._span
+    stage = ctx.stage
+    # 1) vídeo base: enquadramento + remoção de pausas, sem legenda queimada (FFmpeg)
+    ctx.span(a, a + (b - a) * 0.4, stage)
+    clean = render.render_clip(src, info, clip, words, opts | {"captions": False}, out_dir, sub_dir, work_dir, ctx,
+                               variant="_clean")
+    ctx.check()
+    duration = clean["duration"]
+    layout = clean["render_info"]["layout"]
+    hook, zoom_keys, n_zooms = _concat_enhancements(clean["words_out"], duration, layout, opts, meta["titles"])
+    # 2) projeto no Concat (legendas, gancho, zooms) e exportação pelo próprio Concat
+    ctx.span(a + (b - a) * 0.4, a + (b - a) * 0.95, stage + " (Concat)")
+    width, height = config.get("render.width"), config.get("render.height")
+    partial = work_dir / f"{clip['id']}.partial.mp4"
+    storage.remove_quietly(partial)
+    project_dir = concat_bridge.build_project(
+        exe, storage.area_dir("concat", clip["project_id"]), clip["id"], Path(clean["output_path"]),
+        clean["words_out"], opts.get("caption_style", "classic"), clean["render_info"]["fps"], width, height,
+        hook=hook, zoom_keys=zoom_keys, export_to=partial, ctx=ctx)
+    # 3) verificação, miniatura
+    ctx.span(a + (b - a) * 0.95, b, stage)
+    verified = ffmpeg.verify_output(partial, duration, width, height,
+                                    decode=bool(config.get("render.verify_decode")), ctx=ctx)
+    final = out_dir / f"{clip['id']}.mp4"
+    partial.replace(final)
+    thumb = out_dir / f"{clip['id']}.jpg"
+    try:
+        ffmpeg.thumbnail(final, thumb, at=min(1.5, duration / 2))
+    except PipelineError:
+        thumb = None
+    ctx.progress(1.0)
+    return {
+        "output_path": str(final), "thumb_path": str(thumb) if thumb else None, "srt_path": clean["srt_path"],
+        "duration": verified["duration"], "size_bytes": final.stat().st_size, "words_out": clean["words_out"],
+        "render_info": clean["render_info"] | {"engine": "concat", "zooms": n_zooms, "hook": hook,
+                                               "concat_project": str(project_dir),
+                                               "concat_video": clean["output_path"]},
+    }
+
+
 def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
     p = _project(pid)
     opts = p["options"] or {}
@@ -199,11 +283,11 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         db.update("clips", clip["id"], status="rendering", error=None)
         words = clip["words"] or render.words_for_clip(all_words, clip["start"], clip["end"])
         last_exc: Exception | None = None
+        text = " ".join(w["text"] for w in words)
+        meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
         for attempt in range(2):
             try:
-                result = render.render_clip(src, info, clip, words, opts, out_dir, sub_dir, work_dir, ctx)
-                text = " ".join(w["text"] for w in words)
-                meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
+                result = _render_one(src, info, clip, words, opts, meta, out_dir, sub_dir, work_dir, ctx)
                 db.update("clips", clip["id"], status="done", output_path=result["output_path"],
                           thumb_path=result["thumb_path"], srt_path=result["srt_path"],
                           duration=result["duration"], size_bytes=result["size_bytes"],
@@ -212,8 +296,8 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
                           titles_json=meta["titles"], description=meta["description"],
                           hashtags_json=meta["hashtags"], keywords_json=meta["keywords"],
                           rendered_at=db.now(), error=None)
-                ctx.log.info("Corte %s pronto (%.1fs, layout %s)", clip["id"], result["duration"],
-                             result["render_info"]["layout"])
+                ctx.log.info("Corte %s pronto (%.1fs, layout %s, motor %s)", clip["id"], result["duration"],
+                             result["render_info"]["layout"], result["render_info"].get("engine", "ffmpeg"))
                 done += 1
                 last_exc = None
                 break
@@ -272,10 +356,14 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
                                storage.area_dir("clips", pid), ctx, variant="_clean")
     ctx.check()
     ctx.span(0.75, 1.0, "Criando projeto no Concat")
+    titles = clip["titles"] or metadata.generate(" ".join(w["text"] for w in words),
+                                                 p["source_title"] or p["name"], clip["category"])["titles"]
+    hook, zoom_keys, _ = _concat_enhancements(clean["words_out"], clean["duration"],
+                                              clean["render_info"]["layout"], opts, titles)
     project_dir = concat_bridge.build_project(
         exe, storage.area_dir("concat", pid), clip_id, Path(clean["output_path"]), clean["words_out"],
         opts.get("caption_style", "classic"), clean["render_info"]["fps"],
-        config.get("render.width"), config.get("render.height"))
+        config.get("render.width"), config.get("render.height"), hook=hook, zoom_keys=zoom_keys)
     current = db.fetch_one("SELECT render_info_json FROM clips WHERE id = ?", (clip_id,))["render_info"] or {}
     db.update("clips", clip_id, render_info_json=current | {"concat_project": str(project_dir),
                                                             "concat_video": clean["output_path"]})

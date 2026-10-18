@@ -86,6 +86,9 @@ const form = reactive({
   captions: true,
   trim_silence: true,
   review: false,
+  engine: 'ffmpeg',
+  hook: true,
+  zoom: true,
   rightsConfirmed: false,
   rightsBasis: 'own',
   rightsNote: '',
@@ -121,6 +124,7 @@ async function submit(force = false) {
         count: count.value, min_duration: durations.value[0], max_duration: durations.value[1],
         style: form.style, caption_style: form.caption_style, layout: form.layout,
         captions: form.captions, trim_silence: form.trim_silence, review: form.review,
+        engine: form.engine, hook: form.hook, zoom: form.zoom,
       },
       force,
     }
@@ -310,6 +314,26 @@ onMounted(async () => {
               <option v-for="(label, key) in LAYOUT_LABELS" :key="key" :value="key" :disabled="key === 'manual'">{{ label }}</option>
             </select>
             <p class="mt-1.5 text-xs text-ink-500">Automático: segue o rosto principal ou divide a tela quando há duas pessoas distantes. Ajuste fino por corte na revisão.</p>
+          </div>
+
+          <div>
+            <span class="label">Motor de edição</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button class="rounded-xl border p-3 text-left transition" :class="form.engine === 'ffmpeg' ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'" @click="form.engine = 'ffmpeg'">
+                <div class="text-sm font-medium text-ink-100">Rápido (FFmpeg)</div>
+                <div class="text-xs text-ink-400">Legenda animada palavra a palavra</div>
+              </button>
+              <button class="rounded-xl border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50" :disabled="!meta?.concat_available"
+                      :class="form.engine === 'concat' ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-ink-600 bg-ink-850 hover:border-ink-500'" @click="form.engine = 'concat'">
+                <div class="text-sm font-medium text-ink-100">Edição com IA (Concat)</div>
+                <div class="text-xs text-ink-400">{{ meta?.concat_available ? 'Zoom de ênfase, texto de gancho, projeto editável' : 'Instale o Concat para ativar' }}</div>
+              </button>
+            </div>
+            <div v-if="form.engine === 'concat'" class="mt-3 space-y-2 text-sm">
+              <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Texto de gancho nos primeiros segundos</span><input v-model="form.hook" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+              <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Zoom nas frases de ênfase</span><input v-model="form.zoom" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+              <p class="text-xs text-ink-500">No Concat as legendas aparecem por frase. Se o Concat falhar, o corte é feito pelo FFmpeg automaticamente.</p>
+            </div>
           </div>
 
           <div class="space-y-3 text-sm">

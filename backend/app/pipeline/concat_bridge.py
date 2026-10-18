@@ -25,6 +25,7 @@ from .errors import FatalPipelineError, PipelineError
 from .ffmpeg import _CREATE_NO_WINDOW
 
 PROTOCOL_VERSION = "2025-06-18"
+HOOK_DURATION_S = 2.6
 TIMEOUT_S = 120
 
 
@@ -211,8 +212,15 @@ def caption_entries(words: list[dict], caption_style: str) -> list[dict]:
 
 
 def build_project(exe: Path, location: Path, name: str, video: Path, words: list[dict],
-                  caption_style: str, fps: int, width: int, height: int) -> Path:
-    """Cria (ou recria) o projeto do Concat em `location/name`. Retorna a pasta do projeto."""
+                  caption_style: str, fps: int, width: int, height: int, *,
+                  hook: str | None = None, zoom_keys: list[dict] | None = None,
+                  export_to: Path | None = None, ctx=None) -> Path:
+    """Cria (ou recria) o projeto do Concat em `location/name` e retorna a pasta.
+
+    `hook`: texto de gancho nos primeiros segundos. `zoom_keys`: keyframes de escala
+    (ver enhance.zoom_keyframes). `export_to`: se informado, o próprio Concat renderiza
+    o projeto para esse MP4 (com progresso e cancelamento via `ctx`).
+    """
     location.mkdir(parents=True, exist_ok=True)
     project_dir = location / name
     if project_dir.exists():
@@ -227,18 +235,65 @@ def build_project(exe: Path, location: Path, name: str, video: Path, words: list
         media_id = media.get("createdId")
         if not media_id:
             raise McpError("O Concat não devolveu o id da mídia importada")
-        c.call("clips_add_sequence", {"path": path, "mediaIds": [media_id], "start": 0.0})
+        placed = c.call("clips_add_sequence", {"path": path, "mediaIds": [media_id], "start": 0.0})
+        clip_id = placed.get("createdId")
+        for key in zoom_keys or []:
+            if not clip_id:
+                break
+            args = {"path": path, "clipId": clip_id, "property": "scale", "at": key["at"], "value": key["value"]}
+            if key.get("ease"):
+                args["ease"] = key["ease"]
+            c.call("keyframe_set", args)
         entries = caption_entries(words, caption_style)
+        if hook:
+            # gancho no topo; as legendas seguem embaixo. Não passa do fim do vídeo
+            hook_end = min(HOOK_DURATION_S, max((e["end"] for e in entries), default=HOOK_DURATION_S))
+            # perto do topo (acima dos rostos) e com margem lateral de 8%
+            c.call("title_add", {"path": path, "start": 0.0, "duration": hook_end, "above": True, "offsetY": -0.36,
+                                 "style": {"content": hook, "fontFamily": font, "fontWeight": max(weight, 700),
+                                           "fontSize": 0.036, "color": "#ffffff", "background": "#7C3AEDE6",
+                                           "align": "center", "maxWidth": 0.84}})
         if entries:
             c.call("captions_add", {"path": path, "captions": entries, "offsetY": 0.2,
                                     "style": {"fontFamily": font, "fontWeight": weight, "fontSize": 0.045,
                                               "color": "#ffffff", "strokeWidth": 0.003,  # fração da altura (~6 px)
                                               "strokeColor": "#000000"}})
         c.call("project_save", {"path": path})
+        if export_to is not None:
+            _export(c, path, export_to, ctx)
         c.call("project_close", {"path": path, "save": False})
     if not project_dir.is_dir():
         raise McpError("O Concat terminou sem criar a pasta do projeto")
     return project_dir
+
+
+def _export(c: ConcatClient, path: str, output: Path, ctx=None) -> None:
+    """Exporta pelo Concat acompanhando o progresso; cancela a exportação se o usuário cancelar."""
+    import time
+
+    job = c.call("export_start", {"path": path, "output": str(output),
+                                  "crf": int(config.get("render.crf")),
+                                  "preset": config.get("render.video_preset")}).get("job")
+    if not job:
+        raise McpError("O Concat não iniciou a exportação")
+    deadline = time.monotonic() + 3600
+    while time.monotonic() < deadline:
+        if ctx is not None and ctx.cancelled():
+            c.call("export_cancel", {"job": job})
+            from .errors import Cancelled
+
+            raise Cancelled()
+        st = c.call("export_status", {"job": job})
+        state = st.get("state")
+        if state == "done":
+            return
+        if state in ("failed", "cancelled"):
+            raise McpError(f"A exportação do Concat falhou: {st.get('error') or state}")
+        if ctx is not None and st.get("total"):
+            ctx.progress(min(st.get("frame", 0) / st["total"], 0.99))
+        time.sleep(0.5)
+    c.call("export_cancel", {"job": job})
+    raise McpError("A exportação do Concat excedeu 1 hora")
 
 
 def open_in_editor(project_dir: Path) -> None:

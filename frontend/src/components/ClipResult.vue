@@ -98,7 +98,7 @@ async function remove() {
           <ExternalLink class="h-3.5 w-3.5" /> Abrir
         </button>
       </div>
-      <div class="text-[11px] text-ink-500">{{ fmtBytes(clip.size_bytes) }} · 1080×1920 · H.264/AAC<span v-if="clip.render_info?.metadata_engine"> · textos: {{ clip.render_info.metadata_engine }}</span></div>
+      <div class="text-[11px] text-ink-500">{{ fmtBytes(clip.size_bytes) }} · 1080×1920 · H.264/AAC<span v-if="clip.render_info?.engine === 'concat'"> · editado no Concat ({{ clip.render_info.zooms || 0 }} zoom<span v-if="clip.render_info.zooms !== 1">s</span><span v-if="clip.render_info.hook">, gancho</span>)</span><span v-if="clip.render_info?.metadata_engine"> · textos: {{ clip.render_info.metadata_engine }}</span></div>
     </div>
   </article>
 </template>

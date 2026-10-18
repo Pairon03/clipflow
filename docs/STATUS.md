@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **89 testes automatizados:
-88 passam, 1 é pulado** (Whisper — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **95 testes automatizados:
+94 passam, 1 é pulado** (Whisper — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -71,6 +71,11 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Cliente MCP (stdio) com tempo limite e erros legíveis | ✅ | testado com servidor falso e com o `concat-mcp` real (v0.2.7, compilado do código enviado) |
 | "Editar no Concat": vídeo sem legenda + projeto 1080×1920 + legendas editáveis | ✅ | o projeto criado foi reaberto e **exportado pelo próprio Concat** (H.264/AAC 1080×1920) com as legendas |
 | "Abrir": abre o projeto na janela do Concat | 🟡 | usa `concat --project <pasta>`. **Não testado com a janela**: aqui só existe o binário sem interface gráfica |
+| Motor "Edição com IA (Concat)": zoom de ênfase | ✅ | keyframes de escala conferidos no projeto do Concat e visíveis no MP4 exportado |
+| Texto de gancho nos primeiros segundos | ✅ | posição e largura ajustadas depois de olhar o quadro renderizado |
+| Exportação pelo Concat, com progresso e cancelamento | ✅ | testado com o `concat-mcp` real; volta para o FFmpeg se o Concat falhar |
+| Escolha dos zooms pela IA local (Ollama) | ⏳ | hoje a escolha é heurística, pela fala |
+| Correção de cor por estilo, transições, estabilização | ⏳ | próximos passos com as ferramentas do Concat |
 | Instalador do Concat para Windows | ⏳ | você instala o Concat separadamente (download oficial) |
 
 ## Fase 4 — Expansão (pendente)

@@ -97,8 +97,21 @@ O ClipFlow detecta o Concat sozinho nos caminhos padrão. Se não detectar, info
 Concat (`concat --mcp headless`), como processos separados: nenhum código do Concat (licença AGPL-3.0) é
 incorporado ao ClipFlow.
 
-> No Concat, as legendas vêm por frase. O destaque animado palavra a palavra continua existindo apenas no MP4
-> renderizado pelo próprio ClipFlow.
+#### Motor "Edição com IA (Concat)"
+
+Ao criar o projeto, escolha o motor **Edição com IA (Concat)**. Cada Short passa a ser montado e exportado pelo
+Concat, com:
+
+- **Zoom de ênfase:** aproximação suave de 12% nas frases com mais marcas de ênfase (exclamações, números,
+  "nunca", "mudou minha vida"…). No máximo um zoom a cada ~8 s, e nunca no layout dividido.
+- **Texto de gancho:** o melhor título sugerido aparece no topo nos primeiros ~2,6 s. Ele só usa frases reais da fala.
+- Legendas editáveis e o projeto salvo: dá para abrir no Concat e ajustar depois.
+
+O enquadramento e a remoção de pausas continuam sendo feitos pelo FFmpeg do ClipFlow. Se o Concat falhar ou não
+estiver instalado, o corte sai pelo FFmpeg automaticamente, e o motivo fica registrado.
+
+> No Concat, as legendas vêm por frase. O destaque animado palavra a palavra continua existindo apenas no motor
+> "Rápido (FFmpeg)".
 
 ---
 
@@ -141,9 +154,10 @@ clipflow-studio/
 │   │   │   ├── metadata.py    títulos, descrição, hashtags
 │   │   │   ├── editing.py     correção de legenda mantendo a sincronização
 │   │   │   ├── concat_bridge.py  ponte MCP com o editor Concat (opcional)
+│   │   │   ├── enhance.py     zoom de ênfase e texto de gancho (motor Concat)
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               89 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               95 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -167,7 +181,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 89 testes (~3 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 95 testes (~3 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

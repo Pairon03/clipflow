@@ -17,6 +17,7 @@ STYLES = {
 }
 CAPTION_STYLES = {"classic", "neon", "minimal", "impact"}
 LAYOUTS = {"auto", "follow", "speaker", "split", "fit", "center", "manual"}
+ENGINES = {"ffmpeg", "concat"}  # concat: zoom de ênfase, texto de gancho e exportação pelo Concat
 MAX_CLIP_SECONDS = 180  # limite atual do YouTube Shorts
 
 
@@ -71,6 +72,9 @@ def validate_options(raw: dict | None) -> dict:
     layout = raw.get("layout") or preset["layout"]
     if layout not in LAYOUTS:
         raise HTTPException(422, "Enquadramento inválido")
+    engine = raw.get("engine") or "ffmpeg"
+    if engine not in ENGINES:
+        raise HTTPException(422, "Motor de edição inválido")
     colors = {}
     for k in ("primary", "highlight", "outline_color", "keyword_color"):
         v = (raw.get("caption_colors") or {}).get(k)
@@ -96,6 +100,9 @@ def validate_options(raw: dict | None) -> dict:
         "trim_silence": bool(raw.get("trim_silence", True)),
         "max_pause": float(preset["max_pause"]),
         "review": bool(raw.get("review", False)),
+        "engine": engine,
+        "hook": bool(raw.get("hook", True)),
+        "zoom": bool(raw.get("zoom", True)),
     }
 
 

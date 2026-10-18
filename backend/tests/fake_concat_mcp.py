@@ -4,6 +4,7 @@ Registra cada chamada em $FAKE_CONCAT_LOG e cria a pasta do projeto como o Conca
 """
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -53,6 +54,21 @@ for line in sys.stdin:
             continue
         projects[args["path"]]["media"].append(args["file"])
         reply(msg["id"], tool_result({"createdId": "m1"}))
+    elif name == "export_start":
+        if os.environ.get("FAKE_CONCAT_FAIL_EXPORT"):
+            reply(msg["id"], tool_result({"message": "encoder exploded"}, error=True))
+            continue
+        # "exporta" copiando a mídia importada (já é H.264/AAC 1080x1920 no fluxo do ClipFlow)
+        shutil.copy(projects[args["path"]]["media"][0], args["output"])
+        reply(msg["id"], tool_result({"job": "j1", "output": args["output"]}))
+    elif name == "export_status":
+        reply(msg["id"], tool_result({"job": args["job"], "state": "done", "frame": 10, "total": 10,
+                                      "fraction": 1.0, "stage": "muxing"}))
+    elif name == "clips_add_sequence":
+        reply(msg["id"], tool_result({"createdId": "c2"}))
+    elif name == "keyframe_set":
+        ok = 0 <= args["at"] <= 1 and args["clipId"] == "c2" and args["property"] == "scale"
+        reply(msg["id"], tool_result({"ok": ok} if ok else {"message": "bad key"}, error=not ok))
     elif name == "captions_add":
         bad = [c for c in args["captions"] if c["end"] <= c["start"]]
         reply(msg["id"], tool_result({"message": "end before start"} if bad else {"createdId": "c9"}, error=bool(bad)))
