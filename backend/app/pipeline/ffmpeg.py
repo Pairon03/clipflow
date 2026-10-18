@@ -32,14 +32,31 @@ def _find(name: str) -> str | None:
     local = config.PROJECT_ROOT / "bin" / exe
     if local.is_file():
         return str(local)
-    return shutil.which(name)
+    found = shutil.which(name)
+    if found:
+        return found
+    if sys.platform == "win32":
+        # o winget instala aqui, mas o PATH só é atualizado em processos abertos depois da instalação
+        roots = [Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet"]
+        for links in (roots[0] / "Links" / exe,):
+            if links.is_file():
+                return str(links)
+        for pattern in ("Packages/Gyan.FFmpeg*/*/bin/" + exe, "Packages/BtbN.FFmpeg*/*/bin/" + exe):
+            for hit in sorted(roots[0].glob(pattern), reverse=True):
+                return str(hit)
+        for extra in (Path("C:/ffmpeg/bin") / exe, Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "ffmpeg" / "bin" / exe):
+            if extra.is_file():
+                return str(extra)
+    return None
 
 
 def ffmpeg_bin() -> str:
     p = _find("ffmpeg")
     if not p:
         raise FatalPipelineError(
-            "FFmpeg não encontrado. Instale o FFmpeg e adicione ao PATH, ou coloque ffmpeg.exe em ./bin"
+            "FFmpeg não encontrado. No Windows, abra o PowerShell e rode: winget install Gyan.FFmpeg — depois "
+            "feche e abra de novo o start-windows.bat (ou reinicie o PC). Alternativa: copie ffmpeg.exe e "
+            "ffprobe.exe para a pasta bin do ClipFlow."
         )
     return p
 

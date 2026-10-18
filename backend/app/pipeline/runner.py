@@ -51,6 +51,9 @@ def find_source_subtitle(pid: str) -> Path | None:
 # ================================================================ ANÁLISE
 def run_analysis(pid: str, ctx: JobContext) -> str:
     """Retorna o próximo passo: 'render' ou 'review'."""
+    # sem FFmpeg nada funciona (nem o download do YouTube): avisa antes de começar
+    ffmpeg.ffmpeg_bin()
+    ffmpeg.ffprobe_bin()
     p = _project(pid)
     opts = p["options"] or {}
     dl_dir = storage.area_dir("downloads", pid)

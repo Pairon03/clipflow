@@ -34,6 +34,7 @@ def meta():
         "max_upload_mb": config.get("limits.max_upload_mb"),
         "max_source_minutes": config.get("limits.max_source_minutes"),
         "concat_available": bool(concat_bridge.find_executable()),
+        "ffmpeg_available": bool(ffmpeg._find("ffmpeg") and ffmpeg._find("ffprobe")),
     }
 
 

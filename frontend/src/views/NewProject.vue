@@ -151,6 +151,14 @@ onMounted(async () => {
       <p class="mt-1 text-ink-400">Escolha a origem, confirme os direitos de uso e configure os cortes.</p>
     </div>
 
+    <div v-if="meta && meta.ffmpeg_available === false" class="flex items-start gap-3 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100">
+      <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0 text-red-300" />
+      <div>
+        <div class="font-medium">FFmpeg não encontrado — os Shorts não podem ser gerados.</div>
+        <div class="mt-1 text-red-200/90">No Windows, abra o PowerShell e rode <code class="rounded bg-black/30 px-1.5 py-0.5">winget install Gyan.FFmpeg</code>. Depois feche a janela preta do ClipFlow e abra o <code class="rounded bg-black/30 px-1.5 py-0.5">start-windows.bat</code> de novo.</div>
+      </div>
+    </div>
+
     <div class="grid gap-6 xl:grid-cols-5">
       <div class="space-y-6 xl:col-span-3">
         <!-- 1. Origem -->

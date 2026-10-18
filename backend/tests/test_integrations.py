@@ -177,3 +177,22 @@ def test_whisper_transcription(sample_two, tmp_path):
         assert "método" in text or "metodo" in text or "segredo" in text
     finally:
         config.set_override("transcription.model", "small")
+
+
+def test_ytdlp_error_without_ansi_and_ffmpeg_hint():
+    class E(Exception):
+        pass
+
+    msg = youtube._friendly(E("\x1b[0;31mERROR:\x1b[0m You have requested merging of multiple formats but "
+                              "ffmpeg is not installed. Aborting due to --abort-on-error"))
+    assert "\x1b" not in msg and "winget install Gyan.FFmpeg" in msg
+    assert youtube._friendly(E("\x1b[0;31mERROR:\x1b[0m Video unavailable")) == "Vídeo indisponível."
+
+
+def test_missing_ffmpeg_fails_fast_with_instructions(monkeypatch):
+    from app.pipeline import ffmpeg, runner
+    from app.pipeline.context import null_context
+
+    monkeypatch.setattr(ffmpeg, "_find", lambda name: None)
+    with pytest.raises(FatalPipelineError, match="winget install Gyan.FFmpeg"):
+        runner.run_analysis("000000000000", null_context())

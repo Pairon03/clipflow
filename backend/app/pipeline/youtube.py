@@ -9,6 +9,7 @@ Política do ClipFlow Studio:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .. import config
@@ -16,6 +17,8 @@ from ..security import canonical_youtube_url
 from .context import JobContext
 from .errors import FatalPipelineError, PipelineError
 
+FFMPEG_MISSING = ("FFmpeg não encontrado. No Windows, abra o PowerShell e rode: winget install Gyan.FFmpeg — "
+                  "depois feche e abra de novo o start-windows.bat (ou reinicie o PC) e clique em Tentar novamente.")
 BLOCKED_AVAILABILITY = {"private", "premium_only", "subscriber_only", "needs_auth"}
 
 
@@ -28,6 +31,7 @@ def _ydl_base() -> dict:
         "socket_timeout": 30,
         "cachedir": False,
         "extractor_retries": 2,
+        "no_color": True,
     }
 
 
@@ -39,9 +43,14 @@ def _import():
     return yt_dlp
 
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _friendly(exc: Exception) -> str:
-    msg = str(exc)
+    msg = _ANSI_RE.sub("", str(exc)).replace("ERROR: ", "").strip()
     low = msg.lower()
+    if "ffmpeg is not installed" in low or "ffmpeg not found" in low:
+        return FFMPEG_MISSING
     if "private" in low:
         return "Vídeo privado — não é possível processar."
     if "sign in" in low or "age" in low or "confirm your age" in low:
