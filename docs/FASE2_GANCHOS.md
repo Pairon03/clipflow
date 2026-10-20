@@ -79,3 +79,39 @@ python -m app.tools.hooks_compare <projeto>  # antigo × novo, com notas, motivo
 ```
 
 O comando só lê (não altera cortes) e grava um relatório JSON em `ClipFlowStudio/logs/`.
+
+## Validação com episódios reais (2 transcrições enviadas pelo usuário)
+
+Dois episódios de 2 h 24 min e 2 h 40 min, transcritos pelo Whisper `small` na máquina do usuário. Para cada um, o
+app escolheu 5 cortes (30–60 s) e cada corte passou pelo gancho antigo, pelas regras novas e pelo `qwen2.5:7b`.
+Avaliação editorial minha, lendo o texto completo de cada corte:
+
+| Corte | Antigo | Novo (regras = IA nos 10 casos) | Veredito |
+|---|---|---|---|
+| Ep.1 · 1 | sem gancho | "As pessoas que fazem você dá certo…" | novo fraco (transcrição truncada) |
+| Ep.1 · 2 | trecho sem pontuação | trecho sem pontuação ("Obriga que a gente estava no carro…") | os dois ruins |
+| Ep.1 · 3 | "Meu irmão João Carlos é maravilhoso…" | "Por que sabe que a família não é que é do sangue?" | **novo melhor** |
+| Ep.1 · 4 | "tira uma foto comigo…" | "Tira uma foto comigo…" (havia "comecei a passar mal… a polícia veio") | os dois fracos |
+| Ep.1 · 5 | "eu já fui corno também…" | igual | os dois bons |
+| Ep.2 · 1 | "a gente tem que sofrer um grande trauma" | "a gente só evolui quando absorve o trauma…" | os dois bons |
+| Ep.2 · 2 | "aquela mesa lá ficou pequena" | "Você lembra que você levou a gente lá?" | os dois ruins (o corte em si pula de assunto) |
+| Ep.2 · 3 | "Fico vendo coisas de curiosidade e E.T." | "O cara acredita em E.T.… Eu acredito." | **novo melhor** |
+| Ep.2 · 4 | "Imagina que bosta, Gabriel…" | "O Neymar tem quantos filhos? 1, registrado, 3 não, 7, 7." | **novo melhor** |
+| Ep.2 · 5 | "se ele não quisesse ser gordo…" | "Tu tomou o monjaro?" | empate |
+
+Resultado: novo melhor em 3, empate em 5 (2 bons, 3 fracos/ruins nos dois), pior em nenhum; o antigo não tinha gancho
+em 1 corte e o novo deu um fraco.
+
+**O que os episódios reais mostraram (e as histórias de teste não):**
+
+1. **A IA não mudou nenhuma escolha.** Nos 9 cortes em que respondeu, o `qwen2.5:7b` concordou com a ordem das regras;
+   os motivos que ele escreve são genéricos ("desafia a curiosidade… mas revela o desfecho" para quase todos). Custo:
+   ~70 s por corte nesta CPU, sem ganho medido nesta amostra. Na 1ª chamada após iniciar o Ollama o modelo não
+   carregou em 5 min (limite do próprio Ollama) e o app usou as regras, como previsto.
+2. **A transcrição limita o gancho.** O Whisper `small` gera trechos longos sem pontuação e palavras erradas
+   ("obriga", "coxtei", "devolador"); o gancho herda isso. Modelo `medium` (ou `large-v3-turbo` com GPU) deve ajudar
+   mais do que qualquer ajuste de gancho.
+3. **Problemas de seleção (Fase 3):** os 5 cortes de cada episódio caíram todos nos primeiros 46 min (os candidatos
+   cobrem o episódio inteiro; a escolha final só pega as 5 maiores notas); 66 de 70 candidatos foram classificados
+   como "Pergunta e resposta" (qualquer "?" na conversa conta); os cortes ficaram em 30–37 s, encostados no mínimo; e
+   um deles (Ep.2 · 2) mistura três assuntos.
