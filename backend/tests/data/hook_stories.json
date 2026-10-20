@@ -1,0 +1,52 @@
+[
+  {
+    "id": "aeroporto",
+    "category": "História",
+    "expect": "hook",
+    "good": ["o senhor vai ter que me acompanhar"],
+    "text": "Cara, isso aconteceu comigo em dois mil e dezenove, né. Eu tava voltando de Lisboa com a minha esposa e a gente tava cansado demais, voo de doze horas. Aí a gente pega a mala, passa pela alfândega, tudo tranquilo. Só que na saída tinha um policial federal olhando pra todo mundo. E ele ficou me encarando. Eu pensei, ué, será que ele me reconheceu? Eu dei até um sorrisinho. Aí ele veio na minha direção, pegou o meu passaporte e falou: o senhor vai ter que me acompanhar. Mano, eu gelei. Minha esposa ficou branca. Me levaram numa sala pequena, sem janela, e eu fiquei lá quarenta minutos sem ninguém me falar nada. Eu já tava imaginando tudo, sabe, tráfico, mala trocada, sei lá. Aí entra um delegado com uma pasta e fala assim: o senhor tem um homônimo com mandado de prisão em Goiás. Era um cara com o meu nome completo, igualzinho. Eles conferiram a digital, viram que não era eu e me liberaram. Desde esse dia eu viajo com uma certidão de nada consta na mochila."
+  },
+  {
+    "id": "falencia",
+    "category": "Emocionante",
+    "expect": "hook",
+    "good": ["trezentos mil reais", "zero na sexta"],
+    "text": "Então, eu abri a minha primeira empresa com vinte e dois anos, né. Era uma importadora de eletrônicos e no começo deu muito certo. Eu ganhava mais dinheiro do que eu sabia gastar, cara. Comprei carro, apartamento, achei que era o cara. Só que eu não entendia nada de câmbio. E aí veio aquela alta do dólar de dois mil e quinze. Eu tinha trezentos mil reais no banco numa segunda-feira e zero na sexta. Porque todos os contratos eram em dólar e eu não tinha proteção nenhuma. Eu lembro de sentar no chão do escritório vazio e chorar. Eu tive que vender o carro, devolver o apartamento e voltar pra casa da minha mãe com vinte e cinco anos. Foi a fase mais difícil da minha vida. Mas foi ali que eu aprendi a única coisa que realmente importa em negócio, que é saber o tamanho do risco que você tá correndo. Hoje eu tenho três empresas e nenhuma delas depende de uma única moeda."
+  },
+  {
+    "id": "genro",
+    "category": "Opinião",
+    "expect": "hook",
+    "good": ["de chinelo", "pediu a minha filha"],
+    "text": "Rapaz, deixa eu te contar do meu genro. A minha filha namorava esse menino fazia uns seis meses e eu nunca tinha visto ele direito, né. Aí um domingo ela fala, pai, ele vem almoçar aqui hoje. Beleza. Eu fiz churrasco, chamei a família toda, todo mundo arrumado. Ele chegou na minha casa de chinelo e bermuda e pediu a minha filha em casamento na frente de todo mundo. Eu fiquei sem reação, cara. A minha mulher começou a rir, a minha sogra quase desmaiou. E eu olhei pra ele e perguntei, mas você trabalha com o quê? E ele falou, eu sou médico, saí agora de um plantão de vinte e quatro horas e vim direto. Aí eu entendi o chinelo. Hoje ele é o genro favorito, o único que me leva no médico de graça."
+  },
+  {
+    "id": "pai",
+    "category": "Emocionante",
+    "expect": "hook",
+    "good": ["cadeira dele estava vazia", "cadeira dele tava vazia"],
+    "text": "O meu pai nunca foi muito de futebol, né. Ele trabalhava de caminhoneiro e passava semanas fora de casa. Então ele nunca me via jogar. Eu jogava pensando nele, sabe. Quando eu cheguei na final do estadual sub vinte, ele prometeu que ia. Comprei o ingresso, guardei a cadeira ali do lado do banco. No dia da final eu olhei pra arquibancada e a cadeira dele tava vazia. Eu joguei o primeiro tempo inteiro com raiva, errei tudo. No intervalo o treinador me chamou e me entregou um celular. Era o meu pai. Ele tinha quebrado o caminhão na estrada e tava ouvindo o jogo no rádio, parado no acostamento. Ele falou, filho, eu tô ouvindo, faz um gol pra mim. Eu fiz dois. Foi a única vez que eu chorei dentro de campo."
+  },
+  {
+    "id": "dividas",
+    "category": "Educativo",
+    "expect": "hook",
+    "good": ["prefere receber menos", "noventa por cento"],
+    "text": "A pergunta que eu mais recebo é essa: como que eu saio das dívidas? E a resposta é simples, mas não é fácil. O primeiro passo é parar de fazer dívida nova, né. Parece óbvio, mas a maioria das pessoas continua usando o cartão de crédito como se fosse salário. Aí o segundo passo é renegociar. E aqui tem um detalhe que pouca gente sabe. O banco prefere receber menos do que não receber nada. Então quando a sua dívida já tá atrasada faz tempo, o banco já lançou ela como prejuízo. Você liga, você negocia, e consegue desconto de até noventa por cento. Eu já vi gente pagar oitocentos reais numa dívida de oito mil. E o terceiro passo é criar uma reserva, nem que seja de cinquenta reais por mês, pra nunca mais voltar pro cartão."
+  },
+  {
+    "id": "curto",
+    "category": "Frase de impacto",
+    "expect": "none",
+    "good": [],
+    "text": "Eu nunca joguei por dinheiro, cara. Eu jogava porque eu amava a bola, e isso ninguém tira de mim."
+  },
+  {
+    "id": "spoiler",
+    "category": "História",
+    "expect": "avoid",
+    "good": [],
+    "avoid": ["no final eu ganhei"],
+    "text": "Então, eu fui pro programa de calouros sem saber cantar direito, né. A minha mãe que me inscreveu escondido. Eu cheguei lá e tinha umas trezentas pessoas na fila. Eu pensei, não vou passar nem da primeira fase. Aí eu cantei uma música do Roberto Carlos, a única que eu sabia inteira. Os jurados ficaram me olhando sem falar nada. Passei pra segunda fase, depois pra terceira, e eu não entendia o que tava acontecendo. Eu ia desistir na semifinal, mas a minha mãe tava na plateia chorando. E aí no final eu ganhei o programa e o prêmio de cinquenta mil reais."
+  }
+]

@@ -4,6 +4,7 @@ import { Play, Pause, ChevronDown, ChevronUp, Save, RotateCcw, Replace, Check, M
 import { api, fileUrl } from '../api'
 import { fmtTime, toast, LAYOUT_LABELS, STATUS } from '../utils'
 import ScoreBreakdown from './ScoreBreakdown.vue'
+import HookPicker from './HookPicker.vue'
 
 const props = defineProps({
   clip: Object,
@@ -62,6 +63,7 @@ const saveRange = () => patch({ start: Number(start.value), end: Number(end.valu
 const saveText = async () => { await patch({ text: text.value }, 'Legenda corrigida (sincronização mantida)'); editingText.value = false }
 const saveLayout = () => patch({ layout: layout.value, manual_x: layout.value === 'manual' ? Number(manualX.value) : null })
 const toggleSelect = () => patch({ selected: !props.clip.selected })
+const chooseHook = (choice) => patch({ hook_choice: choice }, choice === 'none' ? 'Corte sem gancho' : 'Gancho escolhido')
 async function resetText() {
   await api(`/api/clips/${props.clip.id}/reset-text`, { method: 'POST' }).catch((e) => toast(e.message, 'error'))
   emit('changed')
@@ -168,6 +170,10 @@ function nudge(which, delta) {
             <button class="btn-primary mt-2 py-1.5 text-xs" :disabled="saving" @click="saveLayout"><Save class="h-3.5 w-3.5" /> Salvar posição</button>
           </div>
           <p v-if="clip.render_info?.layout" class="mt-2 text-xs text-ink-500">Último render: {{ LAYOUT_LABELS[clip.render_info.layout] }} · {{ clip.render_info.faces ?? 0 }} rosto(s) · {{ clip.render_info.detector || 'sem detector' }}<span v-if="clip.render_info.note"> · {{ clip.render_info.note }}</span></p>
+        </div>
+        <div v-if="project?.options?.cold_open">
+          <span class="label">Gancho de abertura</span>
+          <HookPicker :hook="clip.hook" :clip-start="clip.start" :disabled="saving || busy" @choose="chooseHook" />
         </div>
         <div v-if="clip.selected && alternatives.length">
           <span class="label">Substituir por uma alternativa</span>

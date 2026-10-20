@@ -184,7 +184,10 @@ const models = [
         <p class="text-sm text-ink-400">Opcional e gratuito. Melhora a seleção de cortes e os títulos. Requer o Ollama instalado e um modelo baixado (ex.: <code class="text-ink-200">ollama pull llama3.2:3b</code>).</p>
         <label class="flex items-center justify-between text-sm text-ink-200">Usar Ollama<input v-model="form['ai.ollama_enabled']" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
         <div><label class="label" for="ourl">Endereço</label><input id="ourl" v-model="form['ai.ollama_url']" class="input" /></div>
-        <div><label class="label" for="omodel">Modelo</label><input id="omodel" v-model="form['ai.ollama_model']" class="input" /></div>
+        <div><label class="label" for="omodel">Modelo</label><input id="omodel" v-model="form['ai.ollama_model']" class="input" />
+          <p class="mt-1.5 text-xs text-ink-500">Para avaliar ganchos, use <code class="text-ink-200">qwen2.5:7b</code> (ou <code class="text-ink-200">qwen2.5:3b</code> em PCs com menos memória). O <code class="text-ink-200">llama3.2:3b</code> não diferencia bem os candidatos e o app volta para as regras.</p></div>
+        <div><label class="label" for="hooktimeout">Tempo máximo da IA por gancho (segundos)</label><input id="hooktimeout" v-model.number="form['ai.hook_timeout_s']" type="number" min="10" max="600" class="input" />
+          <p class="mt-1.5 text-xs text-ink-500">Se a IA demorar mais que isso, o gancho é escolhido pelas regras.</p></div>
         <div class="border-t border-ink-700 pt-4">
           <label class="label" for="cpath">Executável do Concat (opcional)</label>
           <input id="cpath" v-model="form['concat.path']" class="input" placeholder="Detectado automaticamente — ex.: C:\Program Files\Concat\concat.exe" />

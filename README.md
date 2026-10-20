@@ -73,8 +73,16 @@ cp config.example.toml config.toml
 - **Ritmo TikTok** (padrão): corta respirações e silêncios entre as falas, deixando só um respiro curto em cada
   corte. O ritmo **Natural** remove apenas pausas longas. Dá para acelerar levemente (1.1x ou 1.2x) sem mudar o
   tom da voz.
-- **Gancho de abertura:** o vídeo começa com a fala mais forte do trecho e depois volta para o início normal. Só
-  acontece quando há uma frase de destaque, curta e completa, mais para frente no corte.
+- **Gancho com payoff (cold open):** o vídeo abre com uma frase de um momento posterior, volta ao começo da história
+  e a mesma frase reaparece no lugar original, agora com contexto (a repetição é intencional). Para cada corte o app
+  gera de 3 a 6 candidatos (trechos literais da fala, sem muletas) e dá notas de 0 a 10 em curiosidade, clareza,
+  impacto emocional, relevância, continuidade, fidelidade e payoff. Regras fixas: pelo menos ~8 s de contexto antes
+  da frase reaparecer, conclusão depois dela, nada do trecho final (entregaria a resolução) e nenhuma frase que mude
+  de sentido sozinha. Sem candidato bom, o corte sai sem gancho. Com o Ollama, a IA avalia os mesmos candidatos (nunca
+  escreve texto) e a nota final é 60% IA + 40% regras; se ela falhar ou demorar, valem as regras. No editor do corte
+  dá para ver os candidatos, as notas e o motivo, e escolher outro ou "sem gancho".
+  Para comparar o gancho antigo com o novo nos seus projetos: `python -m app.tools.hooks_compare <projeto>` (na pasta
+  `backend`, com o ambiente ativo).
 - **Título (chamada do vídeo)** no estilo dos cortes profissionais, desenhado por cima do vídeo:
   - **Tweet**: cartão branco no topo, como um post, com o nome, o @ e o logo do **seu** canal e a frase do canal
     (padrão: "Você achou a melhor página de cortes do TikTok") — ou um resumo do trecho, se preferir.
@@ -147,8 +155,11 @@ Com o Ollama ativo, os 15 melhores candidatos são reavaliados pela IA (30% da n
 são sugeridos por ela — sempre validados (citações que não existem na fala são descartadas). Sem o Ollama, o motor
 heurístico local funciona normalmente.
 
-**Para descrições melhores em português**, se o computador tiver 16 GB de RAM, prefira `ollama pull qwen2.5:7b`
-(≈4,7 GB) e troque o modelo em Configurações. O `llama3.2:3b` funciona, mas escreve pior em português.
+**Modelo recomendado: `qwen2.5:7b`** (`ollama pull qwen2.5:7b`, ≈4,7 GB; usa ~5,2 GB de RAM). Em PCs com menos
+memória, `qwen2.5:3b`. O `llama3.2:3b` escreve pior em português e, nos testes, deu a mesma nota a todos os
+candidatos a gancho (o app descarta essa resposta e usa as regras). Precisa do Ollama 0.5 ou mais novo (saída
+estruturada). Tempo medido num servidor de 4 núcleos **sem placa de vídeo**: 40–125 s por corte para avaliar os
+ganchos; com GPU NVIDIA é bem mais rápido. O limite fica em **Configurações → IA local** (padrão 180 s).
 
 **Como o texto é montado:** a descrição tem gancho → contexto (quem fala, em qual programa, sobre o quê) → uma frase
 real do trecho → pergunta para comentar → crédito → hashtags. As frases são limpas das muletas da fala ("né", "aí",
@@ -228,7 +239,8 @@ clipflow-studio/
 │   │   │   ├── metadata.py    títulos, descrição, hashtags
 │   │   │   ├── editing.py     correção de legenda mantendo a sincronização
 │   │   │   ├── concat_bridge.py  ponte MCP com o editor Concat (opcional)
-│   │   │   ├── enhance.py     zoom de ênfase, gancho de abertura e texto de gancho (Concat)
+│   │   │   ├── enhance.py     zoom de ênfase e texto de gancho (Concat); gancho antigo, mantido para comparação
+│   │   │   ├── hooks.py       gancho com payoff: candidatos, 7 critérios, IA local, escolha manual
 │   │   │   ├── overlay.py     títulos sobrepostos (tweet, caixa, citação)
 │   │   │   ├── color.py       filtros de cor (gradação)
 │   │   │   ├── censor.py      palavrões: silenciar/bipe e mascarar texto
@@ -236,7 +248,7 @@ clipflow-studio/
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               148 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               163 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -260,7 +272,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 148 testes (~7 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 163 testes (~8 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

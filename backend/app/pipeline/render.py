@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import censor, color, enhance, ffmpeg, framing, overlay, sfx, subtitles
+from . import censor, color, enhance, ffmpeg, framing, hooks, overlay, sfx, subtitles
 from .context import JobContext
 from .errors import PipelineError
 
@@ -298,7 +298,18 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                                               max_pause=max_pause, keep_pad=keep_pad), fps)
     tmap = TimeMap(intervals, speed)
     # gancho de abertura: a fala mais chamativa toca primeiro e o vídeo segue do começo
-    hook = enhance.pick_cold_open(words, start, end) if options.get("cold_open", False) else None
+    # o gancho vem escolhido pelo runner (hooks.py, com IA quando disponível e escolha manual);
+    # chamado direto, o render escolhe pela heurística. A frase volta no lugar original (payoff).
+    hook, hook_meta = None, options.get("hook_meta")
+    if options.get("cold_open", False):
+        if "hook_interval" in options:
+            hook = options["hook_interval"]
+        else:
+            analysis = hooks.analyze(words, start, end, use_llm=False)
+            hook = hooks.selected(analysis, start, end)
+            ch = analysis["chosen"]
+            hook_meta = {"text": analysis["candidates"][ch]["clean"] if ch is not None else None,
+                         "engine": analysis["engine"], "reason": analysis["reason"]}
     if hook:
         hook = snap_intervals([hook], fps)[0]
     hook_out = round((hook[1] - hook[0]) / speed, 3) if hook else 0.0
@@ -428,6 +439,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "intervals": len(intervals), "removed_pause_s": round((end - start) - tmap.duration * speed, 2),
                         "speed": speed, "pace": options.get("pace", "natural"),
                         "cold_open": [hook[0], hook[1]] if hook else None,
+                        "hook": hook_meta,
+                        "payoff_at": round(hook_out + tmap.map(hook[0]), 2) if hook else None,
                         "title_style": title_style if card_png else None,
                         "color_filter": options.get("color_filter") if color.chain(options.get("color_filter")) else None,
                         "zooms": len(zooms), "zoom_times": [round(z0, 2) for z0, _ in zooms],

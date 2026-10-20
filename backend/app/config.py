@@ -43,6 +43,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "ollama_url": "http://127.0.0.1:11434",
         "ollama_model": "llama3.2:3b",
         "ollama_timeout_s": 120,
+        "hook_timeout_s": 180,   # avaliação de ganchos pela IA; acima disso usa só a heurística
     },
     "render": {
         "width": 1080,
@@ -79,6 +80,7 @@ EDITABLE: dict[str, type] = {
     "ai.ollama_enabled": bool,
     "ai.ollama_url": str,
     "ai.ollama_model": str,
+    "ai.hook_timeout_s": int,
     "render.video_preset": str,
     "render.crf": int,
     "render.loudnorm": bool,
@@ -187,6 +189,8 @@ def coerce(key: str, value: Any) -> Any:
         p = Path(v)
         if not (p.is_file() and p.name.lower().startswith("concat")):
             raise ValueError("Caminho do Concat inválido: aponte para o executável concat (ou concat.exe)")
+    if key == "ai.hook_timeout_s" and not 10 <= v <= 600:
+        raise ValueError("Tempo da IA para ganchos deve ficar entre 10 e 600 s")
     if key == "limits.max_concurrent_jobs" and not 1 <= v <= 8:
         raise ValueError("Tarefas simultâneas deve estar entre 1 e 8")
     return v

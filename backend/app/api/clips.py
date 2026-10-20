@@ -35,6 +35,7 @@ class ClipPatch(BaseModel):
     titles: list[str] | None = None
     description: str | None = Field(default=None, max_length=5000)
     hashtags: list[str] | None = None
+    hook_choice: int | str | None = None   # índice do candidato, "none" (sem gancho) ou "auto"
 
 
 @router.patch("/clips/{cid}")
@@ -80,7 +81,22 @@ def patch_clip(cid: str, body: ClipPatch):
         fields["description"] = body.description
     if body.hashtags is not None:
         fields["hashtags_json"] = [h.strip()[:40] for h in body.hashtags if h.strip()][:15]
-    edits_video = {"start", "end", "layout", "manual_x", "words_json"} & fields.keys()
+    if "start" in fields:
+        fields["hook_json"] = None                  # corte mudou: o gancho é avaliado de novo no render
+    elif body.hook_choice is not None:
+        hook = clip.get("hook")
+        if not hook:
+            raise HTTPException(409, "Este corte ainda não tem ganchos avaliados")
+        choice = body.hook_choice
+        if choice == "auto":
+            choice = None
+        elif isinstance(choice, int):
+            if not 0 <= choice < len(hook.get("candidates") or []):
+                raise HTTPException(422, "Gancho inválido")
+        elif choice != "none":
+            raise HTTPException(422, "Gancho inválido")
+        fields["hook_json"] = hook | {"choice": choice}
+    edits_video = {"start", "end", "layout", "manual_x", "words_json", "hook_json"} & fields.keys()
     if edits_video and clip["status"] == "done":
         fields["render_info_json"] = (clip.get("render_info") or {}) | {"stale": True}
     if fields:

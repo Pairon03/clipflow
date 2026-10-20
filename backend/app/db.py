@@ -113,6 +113,19 @@ def _connect() -> sqlite3.Connection:
     return c
 
 
+# Colunas acrescentadas depois da 1ª versão (só adições: versões antigas do app as ignoram)
+MIGRATIONS = [
+    ("clips", "hook_json", "TEXT"),   # ganchos: candidatos, notas, escolha manual (pipeline/hooks.py)
+]
+
+
+def _migrate(c: sqlite3.Connection) -> None:
+    for table, column, decl in MIGRATIONS:
+        cols = {row["name"] for row in c.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def init() -> None:
     global _initialized_for
     with _init_lock:
@@ -121,6 +134,7 @@ def init() -> None:
         try:
             c.execute("PRAGMA journal_mode = WAL")
             c.executescript(SCHEMA)
+            _migrate(c)
             c.commit()
             for row in c.execute("SELECT key, value_json FROM settings"):
                 try:

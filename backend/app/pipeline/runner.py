@@ -9,7 +9,7 @@ import numpy as np
 
 from .. import config, db, storage
 from . import audio as audio_mod
-from . import censor, ffmpeg, llm, metadata, render, selection, transcribe, youtube
+from . import censor, ffmpeg, hooks, llm, metadata, render, selection, transcribe, youtube
 from .context import JobContext
 from .errors import Cancelled, FatalPipelineError, PipelineError
 
@@ -167,7 +167,54 @@ def select_clips(pid: str, transcript: dict, opts: dict, ctx: JobContext | None 
             )
     if ctx:
         ctx.log.info("%d cortes selecionados, %d alternativas (motor: %s)", len(chosen), len(alternatives), engine)
+    if opts.get("cold_open", False) and ctx:  # só na fila: a reseleção pela API é síncrona (gancho sai no render)
+        ctx.span(*ctx._span, "Escolhendo ganchos")
+        all_words = transcribe.all_words(transcript)
+        for clip in db.fetch_all("SELECT * FROM clips WHERE project_id = ? AND selected = 1 AND status = 'selected' "
+                                 "ORDER BY start", (pid,)):
+            ensure_hook(clip, render.words_for_clip(all_words, clip["start"], clip["end"]), opts, ctx)
     return [c.as_dict() for c in chosen]
+
+
+def ensure_hook(clip: dict, words: list[dict], opts: dict, ctx: JobContext | None = None) -> dict | None:
+    """Gancho do corte: reaproveita o salvo se o corte não mudou; senão avalia de novo e salva.
+
+    A escolha manual (hook.choice) é mantida enquanto início/fim do corte forem os mesmos.
+    """
+    if not opts.get("cold_open", False):
+        return None
+    saved = clip.get("hook")
+    if hooks.is_current(saved, clip["start"], clip["end"]):
+        return saved
+    result = hooks.analyze(words, clip["start"], clip["end"], use_llm=True,
+                           timeout=float(config.get("ai.hook_timeout_s")))
+    db.update("clips", clip["id"], hook_json=result)
+    clip["hook"] = result
+    if ctx:
+        ch = result["chosen"]
+        txt = result["candidates"][ch]["clean"] if ch is not None else None
+        ctx.log.info("Gancho do corte %s (%s, %.1fs): %s", clip["id"], result["engine"], result["elapsed_s"],
+                     f"“{txt}” nota {result['candidates'][ch]['total']}" if txt else f"sem gancho — {result['reason']}")
+    return result
+
+
+def _hook_options(clip: dict, words: list[dict], opts: dict, ctx: JobContext | None) -> dict:
+    """Opções de render com o gancho já escolhido (o render não decide mais sozinho)."""
+    if not opts.get("cold_open", False):
+        return {}
+    h = ensure_hook(clip, words, opts, ctx)
+    interval = hooks.selected(h, clip["start"], clip["end"])
+    meta = None
+    if h:
+        idx = h.get("choice") if isinstance(h.get("choice"), int) else h.get("chosen")
+        if interval and idx is not None:
+            c = h["candidates"][idx]
+            meta = {"text": c["clean"], "total": c["total"], "scores": c["scores"], "engine": h["engine"],
+                    "manual": isinstance(h.get("choice"), int), "payoff": c["payoff"]}
+        else:
+            meta = {"text": None, "engine": h["engine"], "manual": h.get("choice") == "none",
+                    "reason": "escolha manual: sem gancho" if h.get("choice") == "none" else h.get("reason", "")}
+    return {"hook_interval": interval, "hook_meta": meta}
 
 
 # ================================================================ RENDER
@@ -308,6 +355,7 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         if opts.get("censor", "nenhum") != "nenhum":
             meta = censor.censor_meta(meta)  # palavrões mascarados também nos títulos e na descrição
         clip_opts = _clip_options(opts, meta, clip, order.index(clip["id"]) if clip["id"] in order else i)
+        clip_opts |= _hook_options(clip, words, opts, ctx)
         for attempt in range(2):
             try:
                 result = _render_one(src, info, clip, words, clip_opts, meta, out_dir, sub_dir, work_dir, ctx)
@@ -374,7 +422,8 @@ def run_concat_export(pid: str, clip_id: str, ctx: JobContext) -> str:
                                                    clip["start"], clip["end"])
 
     ctx.span(0.0, 0.75, "Preparando vídeo sem legenda para o Concat")
-    clean = render.render_clip(src, info, clip, words, opts | {"captions": False, "zoom_fx": False},
+    clean = render.render_clip(src, info, clip, words,
+                               opts | {"captions": False, "zoom_fx": False} | _hook_options(clip, words, opts, ctx),
                                storage.area_dir("exports", pid), storage.area_dir("subtitles", pid),
                                storage.area_dir("clips", pid), ctx, variant="_clean")
     ctx.check()
