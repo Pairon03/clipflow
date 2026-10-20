@@ -47,5 +47,9 @@ const censors = [
       <span>Zoom nos momentos mais fortes<span class="block text-xs text-ink-500">No máximo um a cada ~8 s</span></span>
       <input v-model="opts.zoom_fx" type="checkbox" class="h-4 w-4 accent-violet-500" />
     </label>
+    <label class="flex items-center justify-between gap-3 text-ink-200" :class="{ 'self-end pb-1': wide }">
+      <span>Inversão momentânea da imagem<span class="block text-xs text-ink-500">Espelha por ~1 s e volta; uma vez por vídeo</span></span>
+      <input v-model="opts.flip_fx" type="checkbox" class="h-4 w-4 accent-violet-500" />
+    </label>
   </div>
 </template>

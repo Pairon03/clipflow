@@ -267,3 +267,50 @@ def filter_preview(name: str = "nenhum", project_id: str | None = None):
             continue
         return FileResponse(out, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
     raise HTTPException(404, "Nenhum vídeo disponível para a prévia")
+
+
+# ------------------------------------------------------------------ preferências de edição
+# escolhas padrão de cada projeto novo (aba "Preferências"); arquivo na pasta de dados
+PREFERENCE_KEYS = (
+    "caption_style", "layout", "pace", "speed", "cold_open", "title_style", "title_duration", "title_position",
+    "color_filter", "transition", "zoom_fx", "flip_fx", "sfx", "censor", "engine", "hook", "zoom",
+    "min_duration", "max_duration", "count",
+)
+
+
+def _preferences_path():
+    return storage.root() / "preferences.json"
+
+
+@router.get("/preferences")
+def get_preferences():
+    import json
+
+    p = _preferences_path()
+    try:
+        saved = json.loads(p.read_text(encoding="utf-8")) if p.is_file() else {}
+    except (OSError, ValueError):
+        saved = {}
+    return {"options": saved, "saved": bool(saved)}
+
+
+class PreferencesIn(BaseModel):
+    options: dict
+
+
+@router.put("/preferences")
+def put_preferences(body: PreferencesIn):
+    import json
+
+    from .common import validate_options
+
+    opts = validate_options(body.options)          # mesma validação de um projeto novo
+    prefs = {k: opts[k] for k in PREFERENCE_KEYS if k in opts}
+    _preferences_path().write_text(json.dumps(prefs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"options": prefs, "saved": True}
+
+
+@router.delete("/preferences")
+def delete_preferences():
+    storage.remove_quietly(_preferences_path())
+    return {"options": {}, "saved": False}

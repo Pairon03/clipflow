@@ -148,6 +148,7 @@ def validate_options(raw: dict | None) -> dict:
         "color_filter": color_filter,
         "transition": transition,
         "zoom_fx": bool(raw.get("zoom_fx", True)),
+        "flip_fx": bool(raw.get("flip_fx", True)),
         "sfx": sfx,
         "censor": censor,
     }

@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **163 testes automatizados:
-161 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **166 testes automatizados:
+164 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -44,6 +44,8 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Alternar para quem está falando | 🟡 | **experimental**: usa movimento da região da boca. Renderiza corretamente, mas a precisão da troca não foi medida com podcasts reais |
 | Revisão: prévia, ajuste de início/fim, troca por alternativa, correção de legenda | ✅ | correção mantém a sincronização (alinhamento por diff) |
 | Remoção de pausas longas | ✅ | |
+| Inversão momentânea da imagem (1 por vídeo) | ✅ | teste compara pixels: espelhado só dentro da janela |
+| Aba Preferências (padrões de edição dos projetos novos) | ✅ | salva em preferences.json, validada como um projeto |
 | Gancho com payoff: 7 critérios, regras de payoff, IA local, escolha manual | ✅ | testado com Ollama real (qwen2.5:7b, qwen2.5:3b, llama3.2:3b) em histórias escritas para o teste; ver docs/FASE2_GANCHOS.md. Falta validar com episódios reais |
 | Ritmo TikTok (corta respirações) e aceleração 1.1x/1.2x | ✅ | corte em uma passada (select/aselect) alinhado aos quadros; sincronia de áudio e vídeo verificada |
 | Gancho de abertura (fala forte antes do início) | ✅ | só quando há frase curta, completa e de destaque; testado com vídeo sintético |

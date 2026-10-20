@@ -159,8 +159,9 @@ def _ease(x: str) -> str:
 
 
 def effects_filter(zooms: list[tuple[float, float]], transition: str | None, at: float | None,
-                   out_w: int, out_h: int) -> str | None:
-    """Efeitos de vídeo no tempo final: zooms de ênfase suaves e transição depois do gancho.
+                   out_w: int, out_h: int, flip: tuple[float, float] | None = None) -> str | None:
+    """Efeitos de vídeo no tempo final: zooms de ênfase suaves, transição depois do gancho e uma
+    inversão momentânea da imagem (espelho por ~1 s, uma vez por vídeo).
 
     O zoom é um scale por quadro (eval=frame) seguido de crop no tamanho do vídeo.
     """
@@ -177,6 +178,8 @@ def effects_filter(zooms: list[tuple[float, float]], transition: str | None, at:
         chain.append(f"eq=brightness='0.55*max(0,1-abs(t-{at:.3f})/0.12)':eval=frame")
     elif transition == "fade" and at is not None:
         chain.append(f"eq=brightness='-0.85*max(0,1-abs(t-{at:.3f})/0.16)':eval=frame")
+    if flip:
+        chain.append(f"hflip=enable='between(t,{flip[0]:.3f},{flip[1]:.3f})'")
     return ",".join(chain) or None
 
 
@@ -385,10 +388,12 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     zooms = []
     if options.get("zoom_fx", False) and not split:
         zooms = enhance.pick_zooms(out_words, out_duration, skip_start=hook_out + 0.8)
-    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band)
+    flip = enhance.pick_flip(out_words, out_duration, avoid=[(0.0, hook_out + 1.0)] + zooms) \
+        if options.get("flip_fx", False) else None
+    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band, flip)
     sfx_path = sfx.build_track(out_duration, work_dir / f"{clip_id}{variant}.sfx.wav", options.get("sfx"),
                                whoosh_at=hook_out if hook and transition != "nenhuma" else None,
-                               pop_at=([0.05] if card_png else []) + [s for s, _ in zooms],
+                               pop_at=([0.05] if card_png else []) + [s for s, _ in zooms] + ([flip[0]] if flip else []),
                                bips=muted if censor_mode == "bip" else None)
     overlay_idx = (2 if hook else 1) if card_png else None
     sfx_idx = (1 + bool(hook) + bool(card_png)) if sfx_path else None
@@ -444,6 +449,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "title_style": title_style if card_png else None,
                         "color_filter": options.get("color_filter") if color.chain(options.get("color_filter")) else None,
                         "zooms": len(zooms), "zoom_times": [round(z0, 2) for z0, _ in zooms],
+                        "flip": list(flip) if flip else None,
                         "transition": transition if hook else None,
                         "sfx": options.get("sfx") if sfx_path else None, "muted_words": len(muted),
                         "fps": fps, "tracks": plan.get("tracks", [])},

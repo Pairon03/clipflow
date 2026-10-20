@@ -99,6 +99,9 @@ cp config.example.toml config.toml
   - **Transição depois do gancho:** zoom rápido ("soco"), flash ou escurecer, no ponto em que o vídeo volta ao começo.
   - **Zoom nos momentos mais fortes:** aproximação suave de 10% nas falas com mais ênfase (no máximo um a cada ~8 s;
     desligado no layout dividido).
+  - **Inversão momentânea:** a imagem espelha por ~1 s e volta, uma vez por vídeo, num momento de ênfase entre 30% e
+    80% do corte, longe do gancho e dos zooms (título e legenda não espelham). É efeito de estilo: não esconde a origem
+    do vídeo nem evita Content ID.
   - **Efeitos sonoros** (sutil ou normal): whoosh na transição e um "pop" leve quando o título aparece e nos zooms.
     Os sons são sintetizados pelo próprio app (nenhum arquivo de terceiros) e ficam por baixo da fala, com limitador
     contra picos.
@@ -113,6 +116,10 @@ cp config.example.toml config.toml
 - **Descrições chamativas:** gancho com emoji, a frase mais forte da fala entre aspas, uma chamada para comentar
   ou seguir, o crédito do episódio e hashtags (inclusive do convidado e do programa, quando o título do vídeo
   segue o formato "CONVIDADO - Programa #123").
+
+**Preferências** (menu lateral): o jeito padrão de editar — quantidade, duração, legenda, enquadramento, ritmo,
+título, filtro, efeitos e motor. Todo projeto novo já abre com essas escolhas; em "Criar Shorts" também dá para salvar
+as escolhas atuais como padrão.
 
 Na página do projeto, o painel de estilo refaz os Shorts prontos (vídeo e descrição) sem transcrever de novo.
 
@@ -248,7 +255,7 @@ clipflow-studio/
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               163 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               166 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -272,7 +279,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 163 testes (~8 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 166 testes (~8 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend

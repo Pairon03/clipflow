@@ -129,3 +129,74 @@ def test_concat_clean_variant_skips_ffmpeg_zoom():
 
     assert inspect.getsource(runner).count('"zoom_fx": False') == 2
     assert config.get("censor.extra_words") == ""
+
+
+def test_pick_flip_once_away_from_hook_and_zooms():
+    from app.pipeline import enhance
+
+    words = [{"text": t, "start": i * 0.4, "end": i * 0.4 + 0.35}
+             for i, t in enumerate(("Eu nunca vou esquecer aquele dia incrível! " * 12).split())]
+    dur = words[-1]["end"] + 0.5
+    zooms = [(dur * 0.5, dur * 0.5 + 1.5)]
+    a, b = enhance.pick_flip(words, dur, avoid=[(0.0, 5.0)] + zooms)
+    assert b - a == pytest.approx(enhance.FLIP_S, abs=0.01)
+    assert 0.3 * dur <= a <= 0.8 * dur
+    for za, zb in zooms:
+        assert a >= zb + enhance.FLIP_MARGIN_S or b <= za - enhance.FLIP_MARGIN_S
+    assert enhance.pick_flip(words[:10], 8.0) is None              # vídeo curto: sem inversão
+    fx = render.effects_filter([], None, None, 1080, 1920, flip=(a, b))
+    assert fx == f"hflip=enable='between(t,{a:.3f},{b:.3f})'"
+    assert validate_options({})["flip_fx"] is True
+
+
+def test_flip_render_mirrors_only_during_window(sample_moving, tmp_path):
+    """O quadro dentro da janela é o espelho do original; fora dela, volta ao normal."""
+    from PIL import Image, ImageChops
+
+    from app.pipeline import transcribe
+    from app.pipeline.context import null_context
+
+    src = sample_moving["video"]
+    info = ffmpeg.probe(src).as_dict()
+    t = transcribe.import_subtitles(sample_moving["srt"], info["duration"])
+    words = render.words_for_clip(transcribe.all_words(t), 0.45, 30.5)
+    clip = {"start": 0.45, "end": 30.5, "layout": "follow"}
+    flip = render.render_clip(src, info, clip | {"id": "flip00000001"}, words, {"flip_fx": True, "captions": False},
+                              tmp_path, tmp_path, tmp_path, null_context())
+    plain = render.render_clip(src, info, clip | {"id": "flip00000002"}, words, {"captions": False},
+                               tmp_path, tmp_path, tmp_path, null_context())
+    a, b = flip["render_info"]["flip"]
+    assert plain["render_info"]["flip"] is None
+
+    def frame(path, at, name):
+        out = tmp_path / name
+        ffmpeg.run(["-ss", f"{at:.3f}", "-i", str(path), "-frames:v", "1", "-vf", "scale=270:480", str(out)])
+        return Image.open(out).convert("L")
+
+    def diff(x, y):
+        return sum(ImageChops.difference(x, y).getdata()) / (x.width * x.height)
+
+    mid = (a + b) / 2
+    f_in, p_in = frame(flip["output_path"], mid, "fi.png"), frame(plain["output_path"], mid, "pi.png")
+    assert diff(f_in, p_in.transpose(Image.FLIP_LEFT_RIGHT)) < diff(f_in, p_in)   # dentro: espelhado
+    f_out, p_out = frame(flip["output_path"], b + 1.0, "fo.png"), frame(plain["output_path"], b + 1.0, "po.png")
+    assert diff(f_out, p_out) < 3                                                    # depois: normal de novo
+
+
+def test_preferences_api_roundtrip():
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with TestClient(create_app(start_worker=False)) as client:
+        client.delete("/api/preferences")
+        assert client.get("/api/preferences").json() == {"options": {}, "saved": False}
+        r = client.put("/api/preferences", json={"options": {"title_style": "faixa", "flip_fx": False,
+                                                             "caption_style": "amarela", "count": 3}})
+        assert r.status_code == 200
+        got = client.get("/api/preferences").json()
+        assert got["saved"] and got["options"]["title_style"] == "faixa" and got["options"]["flip_fx"] is False
+        assert got["options"]["count"] == 3 and "review" not in got["options"]     # só escolhas de edição
+        assert client.put("/api/preferences", json={"options": {"title_style": "<x>"}}).status_code == 422
+        client.delete("/api/preferences")
+        assert client.get("/api/preferences").json()["saved"] is False

@@ -55,6 +55,30 @@ def pick_zooms(words: list[dict], duration: float, skip_start: float = HOOK_DURA
     return sorted(chosen)
 
 
+FLIP_S = 0.9            # duração da inversão momentânea (espelho)
+FLIP_MARGIN_S = 1.5     # distância mínima de zooms, gancho e transição
+
+
+def pick_flip(words: list[dict], duration: float,
+              avoid: list[tuple[float, float]] | None = None) -> tuple[float, float] | None:
+    """Um único momento para espelhar a imagem por ~1 s: o início do bloco de fala mais enfático
+    entre 30% e 80% do vídeo, longe dos zooms e do gancho. None se o vídeo for curto ou não houver espaço."""
+    if duration < 12:
+        return None
+    avoid = avoid or []
+    best, best_sc = None, -1.0
+    for g in subtitles.group_words(words, max_chars=28, max_words=5):
+        s = g[0]["start"]
+        if not (0.3 * duration <= s <= 0.8 * duration - FLIP_S):
+            continue
+        if any(s < b + FLIP_MARGIN_S and s + FLIP_S > a - FLIP_MARGIN_S for a, b in avoid):
+            continue
+        sc = _group_score(" ".join(w["text"] for w in g)) - abs(s / duration - 0.55)  # leve preferência pelo meio
+        if sc > best_sc:
+            best, best_sc = s, sc
+    return (round(best, 3), round(best + FLIP_S, 3)) if best is not None else None
+
+
 def zoom_keyframes(zooms: list[tuple[float, float]], duration: float,
                    scale: float = ZOOM_SCALE) -> list[dict]:
     """Converte zooms em keyframes de escala do Concat (posição = fração do clipe, 0–1)."""

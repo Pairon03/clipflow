@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, Sparkles, Library, Settings, Menu, X, KeyRound } from 'lucide-vue-next'
+import { LayoutDashboard, Sparkles, Library, Settings, Menu, X, KeyRound, SlidersHorizontal } from 'lucide-vue-next'
 import { auth, setToken } from './api'
 import { toasts } from './utils'
 
@@ -14,6 +14,7 @@ const nav = [
   { to: '/', label: 'Painel', icon: LayoutDashboard },
   { to: '/novo', label: 'Criar Shorts', icon: Sparkles },
   { to: '/biblioteca', label: 'Biblioteca', icon: Library },
+  { to: '/preferencias', label: 'Preferências', icon: SlidersHorizontal },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
 
