@@ -194,7 +194,11 @@ class Publisher:
                            "ORDER BY COALESCE(publish_at, created_at), created_at LIMIT 1", (time.time(),))
         if not pub:
             return False
-        self._upload(pub)
+        with db.conn() as c:   # reserva atômica: dois despachantes nunca enviam o mesmo vídeo
+            claimed = c.execute("UPDATE publications SET status = 'uploading' WHERE id = ? "
+                                "AND status IN ('queued','waiting_quota')", (pub["id"],)).rowcount
+        if claimed:
+            self._upload(pub)
         return True
 
     def _upload(self, pub: dict) -> None:

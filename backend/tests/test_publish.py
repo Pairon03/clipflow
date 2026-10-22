@@ -24,6 +24,8 @@ def google(monkeypatch):
     monkeypatch.setattr(youtube_api, "API_URL", fake.base + "/youtube/v3")
     monkeypatch.setattr(youtube_api, "UPLOAD_URL", fake.base + "/upload")
     monkeypatch.setattr(youtube_api, "CHUNK", 256 * 1024)
+    publisher.publisher.stop()          # os testes chamam run_next() direto, sem o despachante em segundo plano
+    publisher.publisher._stop.clear()   # (com a flag ligada, o envio entende que o app está fechando)
     youtube_api.remove_client()
     db.execute("DELETE FROM publications")
     yield fake
@@ -110,7 +112,8 @@ def test_publish_scheduled_upload_end_to_end(google, client):
     pub_id = r.json()["created"][0]["id"]
     assert publisher.publisher.run_next()
     pub = publisher.get(pub_id)
-    assert pub["status"] == "scheduled" and pub["video_id"] == "vid-1" and pub["url"].endswith("/shorts/vid-1")
+    assert pub["status"] == "scheduled", pub["error"]
+    assert pub["video_id"] == "vid-1" and pub["url"].endswith("/shorts/vid-1")
     up = google.uploads[0]
     assert up["data"] == Path(clip["output_path"]).read_bytes()       # arquivo chegou inteiro, em partes
     assert google.chunks == 3                                           # 700 kB em partes de 256 KiB
