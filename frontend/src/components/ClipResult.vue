@@ -1,11 +1,11 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { Download, Copy, Trash2, FileText, Pencil, Save, Clapperboard, ExternalLink } from 'lucide-vue-next'
+import { Download, Copy, Trash2, FileText, Pencil, Save, Clapperboard, ExternalLink, Youtube, Music2 } from 'lucide-vue-next'
 import { api, fileUrl, getMeta } from '../api'
 import { fmtDuration, fmtDate, fmtBytes, toast } from '../utils'
 
 const props = defineProps({ clip: Object, showProject: Boolean })
-const emit = defineEmits(['changed', 'deleted'])
+const emit = defineEmits(['changed', 'deleted', 'publish'])
 
 const editing = ref(false)
 const titles = ref([...(props.clip.titles || [])])
@@ -34,6 +34,13 @@ async function openConcat() {
 async function copy(text) {
   try { await navigator.clipboard.writeText(text); toast('Copiado!', 'success', 1800) } catch { toast('Não foi possível copiar', 'error') }
 }
+// legenda do TikTok: título + descrição com hashtags, pronta para colar
+async function copyTiktok() {
+  const title = (props.clip.titles || [])[0] || ''
+  await copy([title, props.clip.description || ''].filter(Boolean).join('\n\n'))
+}
+const PUB_LABEL = { queued: 'Na fila do YouTube', uploading: 'Enviando ao YouTube', waiting_quota: 'Na fila do YouTube (limite do dia)', scheduled: 'Agendado no YouTube', done: 'Enviado ao YouTube', failed: 'Falha no envio ao YouTube' }
+
 async function save() {
   try {
     await api(`/api/clips/${props.clip.id}`, { method: 'PATCH', body: { titles: titles.value, description: description.value } })
@@ -90,6 +97,14 @@ async function remove() {
         <button v-else class="btn-secondary p-2" @click="save" title="Salvar" aria-label="Salvar textos"><Save class="h-3.5 w-3.5" /></button>
         <button class="btn-ghost p-2 text-red-300 hover:text-red-200" @click="remove" title="Excluir" aria-label="Excluir"><Trash2 class="h-3.5 w-3.5" /></button>
       </div>
+      <div class="flex flex-wrap gap-1.5">
+        <button class="btn-secondary flex-1 py-2 text-xs" @click="emit('publish', clip)" title="Enviar para o seu canal (agendar, privado, não listado ou público)"><Youtube class="h-3.5 w-3.5 text-red-400" /> YouTube</button>
+        <button class="btn-secondary flex-1 py-2 text-xs" @click="copyTiktok" title="Copia título + descrição + hashtags para colar no TikTok"><Music2 class="h-3.5 w-3.5" /> Legenda TikTok</button>
+      </div>
+      <a v-if="clip.publication" :href="clip.publication.url || '/publicar'" :target="clip.publication.url ? '_blank' : undefined" rel="noopener"
+         class="rounded-lg px-2 py-1 text-xs" :class="clip.publication.status === 'failed' ? 'bg-red-500/10 text-red-300' : 'bg-sky-500/10 text-sky-200'">
+        {{ PUB_LABEL[clip.publication.status] || clip.publication.status }}<span v-if="clip.publication.publish_at && clip.publication.status !== 'failed'"> · {{ fmtDate(clip.publication.publish_at) }}</span>
+      </a>
       <div v-if="concatAvailable" class="flex flex-wrap gap-1.5">
         <button class="btn-secondary flex-1 py-2 text-xs" :disabled="concatBusy" @click="toConcat" title="Cria um projeto do Concat com o vídeo sem legenda e as legendas como textos editáveis">
           <Clapperboard class="h-3.5 w-3.5" /> {{ clip.render_info?.concat_project ? 'Recriar no Concat' : 'Editar no Concat' }}

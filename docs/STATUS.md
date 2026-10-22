@@ -93,12 +93,25 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Correção de cor por estilo, transições, estabilização | ⏳ | próximos passos com as ferramentas do Concat |
 | Instalador do Concat para Windows | ⏳ | você instala o Concat separadamente (download oficial) |
 
+## Publicação
+
+| Funcionalidade | Status | Observações |
+|---|---|---|
+| Conectar canal do YouTube (OAuth com PKCE, credencial "App para computador") | 🧪 | testado com servidor falso do Google; **falta o 1º teste com conta real** |
+| Envio retomável em partes, com progresso | 🧪 | bytes conferidos; retomada após erro na mesma sessão |
+| Agendamento pelo YouTube (publishAt), privado, não listado, público | 🧪 | horários livres calculados na tela; vídeo agendado sobe como privado |
+| Fila própria: limite diário, queda de internet, reinício, autorização revogada | 🧪 | |
+| Título/descrição/tags dentro das regras do YouTube | ✅ | |
+| Selo de publicação na Biblioteca e na página do projeto | ✅ | conferido no navegador |
+| Legenda pronta para o TikTok (copiar) | ✅ | |
+| Vídeos públicos sem passar pelo Studio | ⏳ | depende da auditoria do Google no projeto do usuário |
+
 ## Fase 4 — Expansão (pendente)
 
 | Funcionalidade | Status |
 |---|---|
-| Integração com YouTube Data/Analytics API (OAuth) | ⏳ |
-| Publicação automática (com revisão prévia) | ⏳ |
+| Integração com YouTube Analytics API (métricas dos vídeos) | ⏳ |
+| Publicação automática no TikTok (exige app aprovado pelo TikTok) | ⏳ |
 | Modelos de edição personalizados salvos | ⏳ |
 | Multiusuário / SaaS | ⏳ |
 | Diarização de locutores (pyannote) para "quem fala" mais preciso | ⏳ |

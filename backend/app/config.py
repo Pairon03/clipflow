@@ -64,6 +64,11 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "tweet_mode": "fixo",   # fixo: usa tweet_text | resumo: resume o trecho de cada corte
     },
     "censor": {"extra_words": ""},  # palavras extras a silenciar, separadas por vírgula
+    "youtube": {
+        "category_id": "24",            # Entretenimento
+        "notify_subscribers": True,
+        "times": "12:00, 19:00",        # horários padrão do agendamento (um vídeo por horário)
+    },
 }
 
 # Chaves que a interface pode alterar em tempo de execução, com o tipo esperado.
@@ -92,6 +97,9 @@ EDITABLE: dict[str, type] = {
     "branding.tweet_text": str,
     "branding.tweet_mode": str,
     "censor.extra_words": str,
+    "youtube.category_id": str,
+    "youtube.notify_subscribers": bool,
+    "youtube.times": str,
 }
 
 ALLOWED_VALUES: dict[str, set] = {
@@ -100,6 +108,7 @@ ALLOWED_VALUES: dict[str, set] = {
     "transcription.compute_type": {"int8", "int8_float16", "float16", "float32"},
     "render.video_preset": {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"},
     "branding.tweet_mode": {"fixo", "resumo"},
+    "youtube.category_id": {"17", "20", "22", "23", "24", "25", "26", "27"},
 }
 
 _lock = threading.Lock()
@@ -191,9 +200,28 @@ def coerce(key: str, value: Any) -> Any:
             raise ValueError("Caminho do Concat inválido: aponte para o executável concat (ou concat.exe)")
     if key == "ai.hook_timeout_s" and not 10 <= v <= 600:
         raise ValueError("Tempo da IA para ganchos deve ficar entre 10 e 600 s")
+    if key == "youtube.times":
+        parse_times(v)
     if key == "limits.max_concurrent_jobs" and not 1 <= v <= 8:
         raise ValueError("Tarefas simultâneas deve estar entre 1 e 8")
     return v
+
+
+def parse_times(text: str) -> list[str]:
+    """'12:00, 19:00' -> ['12:00', '19:00'] (ordenados, sem repetidos). Lança ValueError se inválido."""
+    import re
+
+    out = set()
+    for part in re.split(r"[,;\s]+", text.strip()):
+        if not part:
+            continue
+        m = re.fullmatch(r"([01]?\d|2[0-3])[:h]([0-5]\d)?", part)
+        if not m:
+            raise ValueError(f"Horário inválido: {part} (use 12:00, 19:00)")
+        out.add(f"{int(m.group(1)):02d}:{m.group(2) or '00'}")
+    if not out or len(out) > 12:
+        raise ValueError("Informe de 1 a 12 horários (ex.: 12:00, 19:00)")
+    return sorted(out)
 
 
 def set_override(key: str, value: Any) -> None:

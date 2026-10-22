@@ -170,7 +170,10 @@ def get_project(pid: str):
     job = db.fetch_one("SELECT id, kind, status, stage, progress, attempts, max_attempts, error, created_at, "
                        "started_at, finished_at FROM jobs WHERE project_id = ? ORDER BY id DESC LIMIT 1", (pid,))
     out = project_public(p)
-    out["clips"] = [clip_public(c) for c in clips]
+    from .clips import latest_publications
+
+    pubs = latest_publications([c["id"] for c in clips if c["status"] == "done"])
+    out["clips"] = [clip_public(c) | {"publication": pubs.get(c["id"])} for c in clips]
     out["job"] = job
     out["has_transcript"] = runner.transcript_path(pid).exists()
     return out

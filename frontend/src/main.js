@@ -8,6 +8,7 @@ import ProjectView from './views/ProjectView.vue'
 import Library from './views/Library.vue'
 import Settings from './views/Settings.vue'
 import Preferences from './views/Preferences.vue'
+import Publish from './views/Publish.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -16,6 +17,7 @@ const router = createRouter({
     { path: '/novo', component: NewProject, meta: { title: 'Criar Shorts' } },
     { path: '/projetos/:id', component: ProjectView, props: true, meta: { title: 'Projeto' } },
     { path: '/biblioteca', component: Library, meta: { title: 'Biblioteca' } },
+    { path: '/publicar', component: Publish, meta: { title: 'Publicar' } },
     { path: '/preferencias', component: Preferences, meta: { title: 'Preferências de edição' } },
     { path: '/configuracoes', component: Settings, meta: { title: 'Configurações' } },
     { path: '/:pathMatch(.*)*', redirect: '/' },

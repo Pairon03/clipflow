@@ -1,9 +1,10 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { Search, Download, CheckSquare, Square, Clapperboard } from 'lucide-vue-next'
+import { Search, Download, CheckSquare, Square, Clapperboard, Youtube } from 'lucide-vue-next'
 import { api, fileUrl } from '../api'
 import { toast } from '../utils'
 import ClipResult from '../components/ClipResult.vue'
+import PublishDialog from '../components/PublishDialog.vue'
 
 const clips = ref([])
 const projects = ref([])
@@ -44,6 +45,15 @@ const allSelected = computed(() => clips.value.length && selected.value.size ===
 function toggleAll() {
   selected.value = allSelected.value ? new Set() : new Set(clips.value.map((c) => c.id))
 }
+const publishing = ref(null)
+function openPublish() {
+  publishing.value = clips.value.filter((c) => selected.value.has(c.id))
+}
+function published() {
+  publishing.value = null
+  selected.value = new Set()
+  load()
+}
 const zipUrl = computed(() => fileUrl(`/api/library/zip?ids=${[...(selected.value.size ? selected.value : clips.value.map((c) => c.id))].join(',')}`))
 </script>
 
@@ -54,7 +64,10 @@ const zipUrl = computed(() => fileUrl(`/api/library/zip?ids=${[...(selected.valu
         <h1 class="page-title">Biblioteca</h1>
         <p class="mt-1 text-ink-400">Todos os Shorts produzidos, prontos para revisão e download.</p>
       </div>
-      <a v-if="clips.length" :href="zipUrl" class="btn-primary"><Download class="h-4 w-4" /> {{ selected.size ? `Baixar ${selected.size} selecionados` : 'Baixar todos' }} (ZIP)</a>
+      <div v-if="clips.length" class="flex flex-wrap gap-2">
+        <button class="btn-secondary" :disabled="!selected.size" :title="selected.size ? '' : 'Marque os Shorts que quer publicar'" @click="openPublish"><Youtube class="h-4 w-4 text-red-400" /> Publicar {{ selected.size || '' }} no YouTube</button>
+        <a :href="zipUrl" class="btn-primary"><Download class="h-4 w-4" /> {{ selected.size ? `Baixar ${selected.size} selecionados` : 'Baixar todos' }} (ZIP)</a>
+      </div>
     </div>
 
     <div class="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -82,8 +95,9 @@ const zipUrl = computed(() => fileUrl(`/api/library/zip?ids=${[...(selected.valu
         <button class="absolute left-3 top-10 z-10 rounded-md bg-black/70 p-1 text-white backdrop-blur" @click="toggle(c.id)" :aria-label="selected.has(c.id) ? 'Desmarcar' : 'Marcar'">
           <component :is="selected.has(c.id) ? CheckSquare : Square" class="h-4 w-4" :class="selected.has(c.id) ? 'text-brand-300' : ''" />
         </button>
-        <ClipResult :clip="c" show-project @changed="load" @deleted="load" />
+        <ClipResult :clip="c" show-project @changed="load" @deleted="load" @publish="publishing = [c]" />
       </div>
     </div>
+    <PublishDialog v-if="publishing" :clips="publishing" @close="publishing = null" @done="published" />
   </div>
 </template>

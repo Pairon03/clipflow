@@ -91,6 +91,36 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 
+-- publicação nas redes (hoje: YouTube); um registro por envio de um corte
+CREATE TABLE IF NOT EXISTS publications (
+    id TEXT PRIMARY KEY,
+    clip_id TEXT NOT NULL REFERENCES clips(id) ON DELETE CASCADE,
+    platform TEXT NOT NULL DEFAULT 'youtube',
+    status TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    privacy TEXT NOT NULL DEFAULT 'private',
+    publish_at REAL,
+    category_id TEXT NOT NULL DEFAULT '24',
+    notify INTEGER NOT NULL DEFAULT 1,
+    video_id TEXT,
+    url TEXT,
+    session_url TEXT,
+    bytes_sent INTEGER NOT NULL DEFAULT 0,
+    size_bytes INTEGER NOT NULL DEFAULT 0,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    run_after REAL NOT NULL DEFAULT 0,
+    error TEXT,
+    note TEXT,
+    created_at REAL NOT NULL,
+    started_at REAL,
+    finished_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_publications_clip ON publications(clip_id);
+CREATE INDEX IF NOT EXISTS idx_publications_status ON publications(status);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value_json TEXT NOT NULL
@@ -197,7 +227,7 @@ def execute(sql: str, params: tuple = ()) -> int:
 
 
 def update(table: str, row_id: Any, **fields: Any) -> None:
-    if table not in {"projects", "clips", "jobs"}:
+    if table not in {"projects", "clips", "jobs", "publications"}:
         raise ValueError("tabela inválida")
     if not fields:
         return

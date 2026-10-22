@@ -7,14 +7,15 @@ from __future__ import annotations
 import hmac
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
-from . import config, db, storage
-from .api import clips, projects, system, uploads
+from . import config, db, storage, youtube_api
+from .api import clips, projects, publish, system, uploads
+from .publisher import publisher
 from .worker import worker
 
 log = logging.getLogger("clipflow")
@@ -31,9 +32,11 @@ async def lifespan(app: FastAPI):
         log.info("%d upload(s) expirado(s) removido(s)", removed)
     if app.state.start_worker:
         worker.start()
+        publisher.start()
     log.info("ClipFlow Studio pronto. Dados em %s", storage.root())
     yield
     if app.state.start_worker:
+        publisher.stop()
         worker.stop()
 
 
@@ -45,6 +48,10 @@ def create_app(start_worker: bool = True) -> FastAPI:
     async def auth_and_headers(request: Request, call_next):
         token = config.get("server.access_token")
         path = request.url.path
+        if path == "/" and youtube_api.is_pending_state(request.query_params.get("state")):
+            # retorno da autorização do Google (redirect_uri = http://127.0.0.1:<porta>)
+            target = await run_in_threadpool(publish.oauth_callback, dict(request.query_params))
+            return RedirectResponse(target, status_code=303)
         if token and path.startswith("/api/") and path != "/api/health":
             given = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
             given = given or request.query_params.get("token", "")
@@ -64,6 +71,7 @@ def create_app(start_worker: bool = True) -> FastAPI:
     app.include_router(uploads.router)
     app.include_router(projects.router)
     app.include_router(clips.router)
+    app.include_router(publish.router)
 
     if FRONTEND_DIST.is_dir():
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

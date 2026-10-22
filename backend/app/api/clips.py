@@ -188,7 +188,24 @@ def library(project_id: str | None = None, q: str | None = Query(default=None, m
         sql += " AND (c.text LIKE ? OR c.titles_json LIKE ? OR p.name LIKE ?)"
         params += [f"%{q}%"] * 3
     sql += " ORDER BY c.rendered_at DESC"
-    return [clip_public(c) | {"project_name": c["project_name"]} for c in db.fetch_all(sql, tuple(params))]
+    rows = db.fetch_all(sql, tuple(params))
+    pubs = latest_publications([c["id"] for c in rows])
+    return [clip_public(c) | {"project_name": c["project_name"], "publication": pubs.get(c["id"])} for c in rows]
+
+
+def latest_publications(clip_ids: list[str]) -> dict[str, dict]:
+    """Último envio ao YouTube (não cancelado) de cada corte, para mostrar o selo na Biblioteca."""
+    if not clip_ids:
+        return {}
+    out: dict[str, dict] = {}
+    for i in range(0, len(clip_ids), 500):
+        part = clip_ids[i:i + 500]
+        rows = db.fetch_all(
+            f"SELECT clip_id, status, url, publish_at, created_at FROM publications WHERE status != 'cancelled' "
+            f"AND clip_id IN ({','.join('?' * len(part))}) ORDER BY created_at", tuple(part))
+        for r in rows:
+            out[r["clip_id"]] = {k: r[k] for k in ("status", "url", "publish_at")}
+    return out
 
 
 @router.get("/library/zip")

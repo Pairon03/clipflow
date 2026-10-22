@@ -67,6 +67,9 @@ cp config.example.toml config.toml
 6. Marque *"Revisar cortes antes de renderizar"* se quiser ouvir as prévias, ajustar início/fim, corrigir a
    legenda, trocar por alternativas ou mudar o enquadramento antes de renderizar.
 7. Baixe cada Short (MP4 + SRT) ou tudo em ZIP — o ZIP inclui um arquivo com os títulos e descrições sugeridos.
+8. **Publicar no YouTube**: na Biblioteca, marque os Shorts e clique em *Publicar no YouTube* (agendar, privado, não
+   listado ou público). Configuração única de ~15 min na aba **Publicar** — passo a passo em
+   [docs/PUBLICAR.md](docs/PUBLICAR.md). Para o TikTok, o botão *Legenda TikTok* copia título + descrição + hashtags.
 
 ### Estilo TikTok: ritmo, gancho, título e descrições
 

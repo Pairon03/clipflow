@@ -8,6 +8,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import ProgressBar from '../components/ProgressBar.vue'
 import ClipEditor from '../components/ClipEditor.vue'
 import ClipResult from '../components/ClipResult.vue'
+import PublishDialog from '../components/PublishDialog.vue'
 import TitleStylePicker from '../components/TitleStylePicker.vue'
 import FilterPicker from '../components/FilterPicker.vue'
 import EffectsOptions from '../components/EffectsOptions.vue'
@@ -20,6 +21,7 @@ const log = ref('')
 const showLog = ref(false)
 const acting = ref(false)
 const showAlternatives = ref(false)
+const publishing = ref(null)
 const reselect = ref({ count: 5, min_duration: 30, max_duration: 60 })
 const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, title_style: 'tweet', title_duration: 'inteiro',
   title_position: 'topo', color_filter: 'nenhum', transition: 'zoom', zoom_fx: true, flip_fx: true, sfx: 'sutil', censor: 'mudo' })
@@ -157,7 +159,7 @@ async function remove() {
           </div>
         </div>
         <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-          <ClipResult v-for="c in done" :key="c.id + (c.rendered_at || '')" :clip="c" @changed="load" @deleted="load" />
+          <ClipResult v-for="c in done" :key="c.id + (c.rendered_at || '')" :clip="c" @changed="load" @deleted="load" @publish="publishing = [c]" />
         </div>
       </section>
 
@@ -249,5 +251,6 @@ async function remove() {
         <pre v-if="showLog" class="mt-3 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-ink-950 p-4 font-mono text-xs leading-relaxed text-ink-300">{{ log || 'Sem registros ainda.' }}</pre>
       </section>
     </template>
+    <PublishDialog v-if="publishing" :clips="publishing" @close="publishing = null" @done="publishing = null; load()" />
   </div>
 </template>
