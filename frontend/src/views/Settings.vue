@@ -188,6 +188,8 @@ const models = [
           <p class="mt-1.5 text-xs text-ink-500">Para avaliar ganchos, use <code class="text-ink-200">qwen2.5:7b</code> (ou <code class="text-ink-200">qwen2.5:3b</code> em PCs com menos memória). O <code class="text-ink-200">llama3.2:3b</code> não diferencia bem os candidatos e o app volta para as regras.</p></div>
         <div><label class="label" for="hooktimeout">Tempo máximo da IA por gancho (segundos)</label><input id="hooktimeout" v-model.number="form['ai.hook_timeout_s']" type="number" min="10" max="600" class="input" />
           <p class="mt-1.5 text-xs text-ink-500">Se a IA demorar mais que isso, o gancho é escolhido pelas regras.</p></div>
+        <div><label class="label" for="mapblocks">Assuntos do episódio avaliados pela IA</label><input id="mapblocks" v-model.number="form['ai.map_blocks']" type="number" min="0" max="30" class="input" />
+          <p class="mt-1.5 text-xs text-ink-500">A IA lê os melhores assuntos inteiros, dá nota, título e resumo (cerca de 1 min por assunto em CPU). 0 = só as regras.</p></div>
         <div class="border-t border-ink-700 pt-4">
           <label class="label" for="cpath">Executável do Concat (opcional)</label>
           <input id="cpath" v-model="form['concat.path']" class="input" placeholder="Detectado automaticamente — ex.: C:\Program Files\Concat\concat.exe" />

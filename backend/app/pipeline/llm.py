@@ -206,3 +206,53 @@ def metadata(transcript_text: str, source_title: str) -> dict | None:
     )
     data = generate_json(prompt, METADATA_SYSTEM)
     return data if isinstance(data, dict) else None
+
+
+BLOCK_SYSTEM = (
+    "Você é editor-chefe de uma página de cortes de podcast (TikTok, YouTube Shorts). Recebe a transcrição de UM "
+    "bloco de conversa e julga se ele rende um corte forte. Use a escala inteira de 0 a 100, sem concentrar notas: "
+    "acima de 70 só se passar no TESTE DOS 2 SEGUNDOS (um desconhecido rolando o feed pararia para ver), abaixo de "
+    "30 para enrolação, propaganda ou papo sem assunto. Valorize história com começo, virada e desfecho, opinião "
+    "forte, revelação, humor e números concretos. Julgue SOMENTE pelo texto; não invente fatos nem falas. "
+    "Responda apenas em JSON, em português."
+)
+
+BLOCK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "titulo": {"type": "string"},
+        "resumo": {"type": "string"},
+        "tem_desfecho": {"type": "boolean"},
+        "entende_sozinho": {"type": "boolean"},
+        "nota": {"type": "integer", "minimum": 0, "maximum": 100},
+        "motivo": {"type": "string"},
+    },
+    "required": ["titulo", "resumo", "tem_desfecho", "entende_sozinho", "nota", "motivo"],
+}
+
+
+def evaluate_block(text: str, timeout: float | None = None) -> dict | None:
+    """Nota de um bloco inteiro do episódio. Devolve {titulo, resumo, nota 0-100, ...} ou None."""
+    prompt = (
+        "Bloco da conversa:\n\"\"\"\n" + text + "\n\"\"\"\n\n"
+        "Responda:\n"
+        "- titulo: o assunto em até 6 palavras (sem aspas, sem inventar nomes que não aparecem);\n"
+        "- resumo: uma frase de até 20 palavras dizendo o que acontece no bloco;\n"
+        "- tem_desfecho: a história/ideia chega a uma conclusão dentro do bloco?\n"
+        "- entende_sozinho: quem não viu o resto da entrevista entende?\n"
+        "- nota: 0 a 100 (teste dos 2 segundos);\n"
+        "- motivo: até 15 palavras."
+    )
+    data = generate_json(prompt, BLOCK_SYSTEM, timeout=timeout, schema=BLOCK_SCHEMA,
+                         options={"temperature": 0.2, "seed": 7, "num_predict": 300})
+    if not isinstance(data, dict):
+        return None
+    try:
+        nota = max(0, min(100, int(data["nota"])))
+    except (KeyError, TypeError, ValueError):
+        return None
+    title = str(data.get("titulo") or "").strip().strip("\"“”")[:60]
+    summary = str(data.get("resumo") or "").strip()[:200]
+    return {"nota": nota, "titulo": title, "resumo": summary,
+            "tem_desfecho": bool(data.get("tem_desfecho")), "entende_sozinho": bool(data.get("entende_sozinho")),
+            "motivo": str(data.get("motivo") or "").strip()[:160]}

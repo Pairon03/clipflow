@@ -71,6 +71,7 @@ async function remove() {
       <div v-if="showProject" class="truncate text-xs text-ink-500">
         <RouterLink :to="`/projetos/${clip.project_id}`" class="hover:text-brand-300">{{ clip.project_name }}</RouterLink> · {{ fmtDate(clip.rendered_at) }}
       </div>
+      <div v-if="clip.series" class="w-fit rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-200">Série · Parte {{ clip.series.part }}/{{ clip.series.total }}</div>
       <div v-if="clip.render_info?.stale" class="rounded-lg bg-amber-500/10 px-2 py-1 text-xs text-amber-300">Há alterações ainda não renderizadas</div>
 
       <div v-if="!editing" class="space-y-1.5">

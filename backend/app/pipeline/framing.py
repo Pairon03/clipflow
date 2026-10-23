@@ -231,9 +231,18 @@ def _merge_tracks(tracks: list[Track], max_dist: float = 0.1) -> list[Track]:
 
 
 # ---------------------------------------------------------------- câmera virtual
+JUMP_CONFIRM = 3          # um salto grande do alvo precisa se repetir em 3 amostras (ruído do detector)
+CUT_DIFF_MIN = 28.0       # diferença média (0–255) entre quadros que indica troca de câmera
+CUT_DIFF_RATIO = 4.0      # …e bem acima da diferença típica do vídeo
+
+
 def smooth_path(times: list[float], targets: list[float | None], crop_w: float, fps: float,
-                initial: float | None = None) -> list[tuple[float, float]]:
-    """Câmera com zona morta e limite de velocidade. Coordenadas normalizadas (centro do recorte)."""
+                initial: float | None = None, cuts: list[float] | None = None) -> list[tuple[float, float]]:
+    """Câmera com zona morta e limite de velocidade. Coordenadas normalizadas (centro do recorte).
+
+    Na troca de câmera (`cuts`) a câmera vai direto para o rosto, sem panorâmica; fora dela, um salto grande do
+    alvo só é seguido depois de confirmado em JUMP_CONFIRM amostras (ideia do OpenShorts, licença MIT).
+    """
     if not times:
         return []
     known = [x for x in targets if x is not None]
@@ -244,7 +253,27 @@ def smooth_path(times: list[float], targets: list[float | None], crop_w: float, 
     vel = 0.0
     out = []
     goal = cam
+    cuts = sorted(cuts or [])
+    ci = 0
+    pending_cut = False
+    jump_count = 0
     for t, x in zip(times, targets):
+        while ci < len(cuts) and cuts[ci] <= t + 1e-6:
+            pending_cut = True
+            ci += 1
+        if pending_cut and x is not None:
+            cam = goal = x                      # troca de câmera: reposiciona na hora
+            vel = 0.0
+            pending_cut = False
+            jump_count = 0
+            out.append((t, cam))
+            continue
+        if x is not None and abs(x - cam) > crop_w * 0.5:
+            jump_count += 1
+            if jump_count < JUMP_CONFIRM:
+                x = None                         # salto grande ainda não confirmado
+        else:
+            jump_count = 0
         if x is not None and abs(x - cam) > dead:
             goal = x
         diff = goal - cam
@@ -314,9 +343,12 @@ def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, layout:
 
     samples: list[tuple[float, list]] = []
     prev_gray = None
+    diffs: list[tuple[float, float]] = []
     for t, frame in sample_frames(src, start, duration, src_w, src_h, ctx=ctx):
         faces = det.detect(frame)
         g = frame.mean(axis=2).astype(np.float32)
+        if prev_gray is not None:
+            diffs.append((t, float(np.abs(g[::8, ::8] - prev_gray[::8, ::8]).mean())))
         # guarda a energia de movimento da boca de cada rosto (usada no layout "speaker")
         samples.append((t, [(cx, cy, fw, fh, _region_motion(g, prev_gray, (cx, cy, fw, fh)))
                             for (cx, cy, fw, fh, _s) in faces]))
@@ -327,6 +359,8 @@ def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, layout:
         plan.update(layout="center", keyframes=[(0.0, 0.5)], note="Não foi possível ler quadros do vídeo")
         return plan
 
+    cuts = scene_cuts(diffs)
+    plan["cuts"] = [round(c, 2) for c in cuts]
     n = len(samples)
     tracks = _merge_tracks(_track(samples))
     tracks = [tr for tr in tracks if len(tr.points) >= max(3, 0.2 * n)]
@@ -360,7 +394,7 @@ def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, layout:
         return plan
 
     if layout == "speaker":
-        targets = _speaker_targets(times, two)
+        targets = _speaker_targets(times, two, cuts=cuts)
         kf = [(t, clamp_center(x, crop_w)) for t, x in targets]
         plan["keyframes"] = _collapse_steps(kf)
         return plan
@@ -368,11 +402,23 @@ def analyze(src: Path, start: float, end: float, src_w: int, src_h: int, layout:
     # follow: rosto principal, com suavização
     main = tracks[0]
     by_t = {p[0]: p for p in main.points}
+    faces_at = dict(samples)
     targets: list[float | None] = []
+    cut_set = list(cuts)
+    lost_after_cut = False
     for t in times:
         p = by_t.get(t)
-        targets.append(p[1] if p else None)
-    path = smooth_path(times, targets, crop_w, SAMPLE_FPS, initial=main.points[0][1])
+        if any(abs(t - c) < 1e-6 or (c < t and c > t - 1.0 / SAMPLE_FPS) for c in cut_set):
+            lost_after_cut = p is None
+        if p:
+            lost_after_cut = False
+            targets.append(p[1])
+        elif lost_after_cut and faces_at.get(t):
+            # outra câmera e o rosto principal sumiu: segue o maior rosto da cena nova até ele voltar
+            targets.append(max(faces_at[t], key=lambda f: f[2] * f[3])[0])
+        else:
+            targets.append(None)
+    path = smooth_path(times, targets, crop_w, SAMPLE_FPS, initial=main.points[0][1], cuts=cuts)
     path = [(t, clamp_center(x, crop_w)) for t, x in path]
     plan["keyframes"] = rdp(path, eps=0.004)
     return plan
@@ -393,22 +439,54 @@ def _region_motion(g1: np.ndarray, g0: np.ndarray | None, face: tuple) -> float:
     return float(np.abs((r1 - r1.mean()) - (r0 - r0.mean())).mean())
 
 
+def scene_cuts(diffs: list[tuple[float, float]]) -> list[float]:
+    """Trocas de câmera: diferença entre quadros muito acima da típica do vídeo."""
+    if len(diffs) < 3:
+        return []
+    typical = float(np.median([d for _, d in diffs]))
+    return [t for t, d in diffs if d >= CUT_DIFF_MIN and d >= CUT_DIFF_RATIO * max(typical, 1.0)]
+
+
+def _normalized_motion(tr: Track) -> dict:
+    """Movimento da boca na escala da própria pessoa (percentis 20–80).
+
+    Sem isso, quem está mais perto da câmera ou mais iluminado "fala" sempre mais (ideia do OpenShorts, MIT).
+    """
+    vals = np.array(list(tr.motion.values()), dtype=float)
+    if len(vals) < 4:
+        return dict(tr.motion)
+    lo, hi = np.percentile(vals, 20), np.percentile(vals, 80)
+    span = max(hi - lo, 1e-6)
+    return {t: (v - lo) / span for t, v in tr.motion.items()}
+
+
 def _speaker_targets(times: list[float], tracks: list[Track], window: float = 1.5,
-                     min_shot: float = 2.0, ratio: float = 1.3) -> list[tuple[float, float]]:
+                     min_shot: float = 2.0, margin: float = 0.15, confirm: int = 3,
+                     cuts: list[float] | None = None) -> list[tuple[float, float]]:
+    """Enquadra quem está falando: troca só com vantagem clara (margem), confirmada em `confirm` amostras
+    seguidas e depois de pelo menos `min_shot` segundos no mesmo plano (exceto numa troca de câmera)."""
     centers = [tr.median()[0] for tr in tracks]
+    motion = [_normalized_motion(tr) for tr in tracks]
+    cuts = sorted(cuts or [])
     current = 0
     last_switch = -min_shot
+    streak = 0
     out = []
     for t in times:
         energies = []
-        for tr in tracks:
-            vals = [v for tt, v in tr.motion.items() if t - window <= tt <= t]
+        for m in motion:
+            vals = [v for tt, v in m.items() if t - window <= tt <= t]
             energies.append(sum(vals) / len(vals) if vals else 0.0)
         other = 1 - current
-        if (energies[other] > energies[current] * ratio and energies[other] > 0.5
-                and t - last_switch >= min_shot):
+        after_cut = any(t - 1.0 <= c <= t for c in cuts)
+        if energies[other] - energies[current] >= margin and energies[other] > 0.35:
+            streak += 1
+        else:
+            streak = 0
+        if streak >= confirm and (t - last_switch >= min_shot or after_cut):
             current = other
             last_switch = t
+            streak = 0
         out.append((t, centers[current]))
     return out
 

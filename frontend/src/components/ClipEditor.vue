@@ -102,6 +102,7 @@ function nudge(which, delta) {
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
           <span v-if="index != null" class="font-display text-sm font-semibold text-brand-300">#{{ index + 1 }}</span>
+          <span v-if="clip.series" class="rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-200" :title="clip.series.auto ? 'Série sugerida automaticamente: história forte e longa' : 'Série criada por você'">Parte {{ clip.series.part }}/{{ clip.series.total }}</span>
           <span class="rounded-md bg-ink-800 px-2 py-0.5 text-xs text-ink-300">{{ clip.category }}</span>
           <span class="text-xs tabular-nums text-ink-400">{{ fmtTime(clip.start) }} → {{ fmtTime(clip.end) }} · {{ clip.duration_planned }}s</span>
           <span v-if="clip.status === 'done'" class="rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300">Renderizado</span>

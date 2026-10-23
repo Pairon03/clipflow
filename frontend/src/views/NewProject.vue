@@ -97,6 +97,7 @@ const form = reactive({
   title_duration: 'inteiro',
   title_position: 'meio',
   cold_open: true,
+  series: true,
   color_filter: 'nenhum',
   transition: 'zoom',
   zoom_fx: true,
@@ -142,6 +143,7 @@ async function submit(force = false) {
         pace: form.pace, speed: form.speed, title_style: form.title_style, title_duration: form.title_duration,
         cold_open: form.cold_open, title_position: form.title_position, color_filter: form.color_filter,
         transition: form.transition, zoom_fx: form.zoom_fx, sfx: form.sfx, censor: form.censor, flip_fx: form.flip_fx,
+        series: form.series,
       },
       force,
     }

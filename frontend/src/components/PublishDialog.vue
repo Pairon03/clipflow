@@ -13,7 +13,25 @@ const busy = ref(false)
 const again = ref(false)
 const taken = ref(new Set())          // horários já usados por outros agendamentos
 const form = reactive({ mode: 'agendar', startDate: today(), times: '12:00, 19:00', category_id: '24', notify: true })
-const items = reactive(props.clips.map((c) => ({ clip: c, title: (c.titles || [])[0] || '', titleIdx: 0 })))
+// partes de uma série ficam juntas e em ordem (Parte 1, 2, 3…) para irem em horários seguidos
+function ordered(clips) {
+  const out = []
+  const seen = new Set()
+  for (const c of clips) {
+    if (seen.has(c.id)) continue
+    const group = c.series ? clips.filter((x) => x.series?.id === c.series.id).sort((a, b) => a.series.part - b.series.part) : [c]
+    for (const g of group) { seen.add(g.id); out.push(g) }
+  }
+  return out
+}
+const items = reactive(ordered(props.clips).map((c) => ({ clip: c, title: (c.titles || [])[0] || '', titleIdx: 0 })))
+// série escolhida pela metade: avisa quais partes faltam
+const missingParts = computed(() => {
+  const by = {}
+  for (const it of items) if (it.clip.series) (by[it.clip.series.id] ||= { total: it.clip.series.total, parts: [] }).parts.push(it.clip.series.part)
+  return Object.values(by).filter((g) => g.parts.length < g.total)
+    .map((g) => Array.from({ length: g.total }, (_, i) => i + 1).filter((k) => !g.parts.includes(k)))
+})
 
 function today() {
   const d = new Date()
@@ -125,6 +143,7 @@ async function submit() {
           <div v-for="(it, i) in items" :key="it.clip.id" class="flex gap-3 rounded-xl border border-ink-700 bg-ink-850 p-3">
             <img v-if="it.clip.has_thumb" :src="fileUrl(`/api/clips/${it.clip.id}/thumb`)" class="h-20 w-12 shrink-0 rounded-md object-cover" alt="" />
             <div class="min-w-0 flex-1 space-y-1.5">
+              <div v-if="it.clip.series" class="text-[11px] font-semibold text-red-300">Série · Parte {{ it.clip.series.part }}/{{ it.clip.series.total }}</div>
               <input v-model="it.title" class="input py-1.5 text-sm" maxlength="100" :aria-label="`Título do Short ${i + 1}`" />
               <div v-if="(it.clip.titles || []).length > 1" class="flex flex-wrap gap-1">
                 <button v-for="(t, k) in it.clip.titles" :key="k" type="button" class="rounded-md px-1.5 py-0.5 text-[11px]"
@@ -138,6 +157,7 @@ async function submit() {
             </div>
           </div>
         </div>
+        <p v-if="missingParts.length" class="text-xs text-amber-300">Atenção: faltam partes da série ({{ missingParts.map((m) => 'Parte ' + m.join(', ')).join('; ') }}). Marque todas para publicar em ordem.</p>
         <p v-if="stale" class="text-xs text-amber-300">{{ stale }} Short(s) têm alterações ainda não renderizadas; vai a versão já renderizada.</p>
       </div>
 

@@ -72,6 +72,7 @@ class Candidate:
     score: float = 0.0
     category: str = ""
     reasons: list[str] = field(default_factory=list)
+    block: int | None = None            # bloco do mapa do episódio (pipeline/episode.py)
 
     @property
     def text(self) -> str:
@@ -89,7 +90,7 @@ class Candidate:
         return {
             "start": round(self.start, 3), "end": round(self.end, 3), "text": self.text,
             "score": round(self.score, 1), "scores": {k: round(v, 3) for k, v in self.scores.items()},
-            "category": self.category, "reasons": self.reasons,
+            "category": self.category, "reasons": self.reasons, "block": self.block,
         }
 
 
@@ -295,6 +296,7 @@ def select(cands: list[Candidate], count: int, min_gap: float = 1.0,
     per_window = max(1, math.ceil(count * COVERAGE_WINDOW_S / total_s)) if total_s > COVERAGE_WINDOW_S else count
     chosen: list[Candidate] = []
     used: dict[int, int] = {}
+    blocks_used: set[int] = set()
     for limited in (True, False):
         for c in ranked:
             if len(chosen) >= count:
@@ -302,11 +304,14 @@ def select(cands: list[Candidate], count: int, min_gap: float = 1.0,
             if c in chosen:
                 continue
             win = int(c.start // COVERAGE_WINDOW_S)
-            if limited and used.get(win, 0) >= per_window:
+            # 1ª passada: um corte por bloco (assunto) e poucos por trecho de 20 min
+            if limited and (used.get(win, 0) >= per_window or (c.block is not None and c.block in blocks_used)):
                 continue
             if all(c.end + min_gap <= o.start or c.start >= o.end + min_gap for o in chosen):
                 chosen.append(c)
                 used[win] = used.get(win, 0) + 1
+                if c.block is not None:
+                    blocks_used.add(c.block)
     alternatives: list[Candidate] = []
     for c in ranked:
         if len(alternatives) >= 30:
@@ -330,8 +335,55 @@ STYLE_PREFERENCES = {
 }
 
 
+BLOCK_WEIGHT = 0.55       # peso da nota do bloco (história inteira) contra a nota local da janela
+BLOCK_START_BONUS = 5.0   # corte que começa onde o assunto começa se entende sozinho
+CROSS_PENALTY = 12.0      # corte que atravessa dois assuntos
+
+
+def _percentile_map(values: list[float]) -> list[float]:
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    out = [0.0] * len(values)
+    for rank, i in enumerate(order):
+        out[i] = 100.0 * rank / max(len(values) - 1, 1)
+    return out
+
+
+def apply_blocks(cands: list[Candidate], blocks: list) -> None:
+    """Combina a nota local de cada janela com a nota do bloco (assunto/história) em que ela está."""
+    if not blocks or not cands:
+        return
+    starts = [b.start for b in blocks]
+    import bisect
+
+    local = _percentile_map([c.score for c in cands])
+    for c, pct in zip(cands, local):
+        i = max(0, bisect.bisect_right(starts, c.start + 0.5) - 1)
+        b = blocks[i]
+        inside = max(0.0, min(c.end, b.end) - max(c.start, b.start)) / max(c.duration, 0.1)
+        if inside < 0.85 and i + 1 < len(blocks):
+            nb = blocks[i + 1]
+            if max(0.0, min(c.end, nb.end) - max(c.start, nb.start)) / max(c.duration, 0.1) > inside:
+                b, inside = nb, 1 - inside
+        c.block = b.index
+        c.scores["historia"] = b.score / 100
+        # até 95 pela combinação + 5 de bônus: só chega a 100 sem teto, então não volta a empatar
+        score = 0.95 * ((1 - BLOCK_WEIGHT) * pct + BLOCK_WEIGHT * b.score)
+        if abs(c.start - b.start) <= 2.5:
+            score += BLOCK_START_BONUS
+            c.reasons.append("começa onde o assunto começa")
+        if inside < 0.85:
+            score -= CROSS_PENALTY
+            c.reasons.append("passa de um assunto para outro")
+        if b.kind in ("Propaganda/chamada", "Abertura/encerramento"):
+            score -= 40
+        label = b.title or b.kind
+        c.reasons.insert(0, f"Bloco: {label} (nota do bloco {round(b.score)})")
+        c.score = max(0.0, score)
+
+
 def find_clips(transcript: dict, count: int, min_s: float, max_s: float,
-               profile: dict | None = None, style: str = "podcast_premium") -> tuple[list[Candidate], list[Candidate]]:
+               profile: dict | None = None, style: str = "podcast_premium",
+               blocks: list | None = None) -> tuple[list[Candidate], list[Candidate]]:
     words = [w for seg in transcript["segments"] for w in seg["words"]]
     if not words:
         return [], []
@@ -345,4 +397,9 @@ def find_clips(transcript: dict, count: int, min_s: float, max_s: float,
         score_candidate(c, profile, (min_s, max_s))
         if c.category in preferred:
             c.score += STYLE_BONUS
+    if blocks is None:
+        from . import episode
+
+        blocks = episode.build(transcript, profile)
+    apply_blocks(cands, blocks)
     return select(cands, count, total_s=words[-1]["end"])

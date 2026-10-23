@@ -360,17 +360,22 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         card_png = overlay.render_card(title_style, options["title_card"], work_dir / f"{clip_id}{variant}.title.png",
                                        out_w, out_h, position="split" if split else
                                        ("center" if options.get("title_position") == "meio" else "top"))
-    band = overlay.band_height(out_h) if card_png and title_style == "faixa" else 0
+    has_title = card_png is not None
+    band = overlay.band_height(out_h) if has_title and title_style == "faixa" else 0
     overlay_until = None
-    if card_png and options.get("title_duration") == "inicio" and not band:
+    if has_title and options.get("title_duration") == "inicio" and not band:
         overlay_until = min(TITLE_START_S, out_duration)
+    if options.get("series_label"):           # séries: tarja "PARTE 2/3" no mesmo PNG do título (ou sozinha)
+        card_png = overlay.add_series_tag(card_png, options["series_label"],
+                                          work_dir / f"{clip_id}{variant}.title.png", out_w, out_h, band)
+        overlay_until = None
     ass_path = None
     if options.get("captions", True) and out_words:
         style = subtitles.resolve_style(options.get("caption_style", "classic"), options.get("caption_colors"))
         below = None
         if band and split:  # com faixa, a divisão do layout dividido desce junto com o vídeo
             below = (None, band + (out_h - band) // 2 - 70)
-        elif card_png and split:  # legenda (no meio) desce para baixo do título enquanto ele aparece
+        elif has_title and split:  # legenda (no meio) desce para baixo do título enquanto ele aparece
             from PIL import Image
 
             with Image.open(card_png) as im:
@@ -393,7 +398,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
     video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band, flip)
     sfx_path = sfx.build_track(out_duration, work_dir / f"{clip_id}{variant}.sfx.wav", options.get("sfx"),
                                whoosh_at=hook_out if hook and transition != "nenhuma" else None,
-                               pop_at=([0.05] if card_png else []) + [s for s, _ in zooms] + ([flip[0]] if flip else []),
+                               pop_at=([0.05] if has_title else []) + [s for s, _ in zooms] + ([flip[0]] if flip else []),
                                bips=muted if censor_mode == "bip" else None)
     overlay_idx = (2 if hook else 1) if card_png else None
     sfx_idx = (1 + bool(hook) + bool(card_png)) if sfx_path else None

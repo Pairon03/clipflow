@@ -3,7 +3,7 @@ export const DURATION_PRESETS = { '15-30': [15, 30], '30-60': [30, 60], '60-90':
 export const COUNT_PRESETS = [3, 5, 10]
 
 const KEYS = ['caption_style', 'layout', 'pace', 'speed', 'cold_open', 'title_style', 'title_duration',
-  'title_position', 'color_filter', 'transition', 'zoom_fx', 'flip_fx', 'sfx', 'censor', 'engine', 'hook', 'zoom']
+  'title_position', 'color_filter', 'transition', 'zoom_fx', 'flip_fx', 'sfx', 'censor', 'engine', 'hook', 'zoom', 'series']
 
 export function applyPreferences(form, prefs) {
   if (!prefs) return

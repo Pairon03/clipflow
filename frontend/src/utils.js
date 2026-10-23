@@ -55,6 +55,7 @@ export const SCORE_LABELS = {
   coerencia: 'Coerência da fala',
   cortes_suaves: 'Sem cortes abruptos',
   ia_local: 'Avaliação da IA local',
+  historia: 'História inteira (mapa do episódio)',
 }
 
 export const LAYOUT_LABELS = {

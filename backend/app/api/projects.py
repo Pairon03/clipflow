@@ -368,3 +368,95 @@ def project_zip(pid: str):
     p = get_project_or_404(pid)
     clips = db.fetch_all("SELECT * FROM clips WHERE project_id = ? AND status = 'done' ORDER BY start", (pid,))
     return zip_clips(clips, p["name"])
+
+
+# ------------------------------------------------------------------ mapa do episódio e séries
+def _map_blocks(pid: str) -> list:
+    from ..pipeline import episode
+
+    tpath = runner.transcript_path(pid)
+    if not tpath.exists():
+        raise HTTPException(409, "O projeto ainda não tem transcrição")
+    blocks = episode.load(runner.map_path(pid), None)
+    if blocks is None:                      # projetos antigos: mapa só com as regras (rápido)
+        blocks = runner.episode_map(pid, transcribe.load(tpath), runner.load_profile(pid))
+    return blocks
+
+
+@router.get("/{pid}/map")
+def episode_map(pid: str):
+    import math
+
+    p = get_project_or_404(pid)
+    blocks = _map_blocks(pid)
+    opts = p["options"] or {}
+    max_s = float(opts.get("max_duration", 60))
+    clips = db.fetch_all("SELECT id, start, end, status, selected, series_json, block_index FROM clips "
+                         "WHERE project_id = ? AND (selected = 1 OR status = 'done')", (pid,))
+    out = []
+    for b in blocks:
+        inside = [c for c in clips if c["start"] < b.end and c["end"] > b.start]
+        d = b.as_dict()
+        d["clips"] = [{"id": c["id"], "status": c["status"], "series": c["series"]} for c in inside]
+        d["series_possible"] = b.duration > max_s * 1.1 and b.kind != "Propaganda/chamada"
+        d["parts_estimate"] = math.ceil(b.duration / (max_s * 0.9)) if d["series_possible"] else 1
+        out.append(d)
+    total = blocks[-1].end if blocks else 0
+    return {"blocks": out, "duration": total, "ai": any(b.ai for b in blocks), "max_duration": max_s}
+
+
+def _block_or_404(pid: str, index: int):
+    for b in _map_blocks(pid):
+        if b.index == index:
+            return b
+    raise HTTPException(404, "Bloco não encontrado")
+
+
+@router.post("/{pid}/map/{index}/clip")
+def clip_from_block(pid: str, index: int):
+    """Usa um bloco do mapa como corte: escolhe a melhor janela dentro dele e a coloca na seleção."""
+    from ..pipeline import selection
+
+    p = get_project_or_404(pid)
+    if p["status"] in ACTIVE_STATUSES:
+        raise HTTPException(409, "Aguarde o processamento atual terminar")
+    b = _block_or_404(pid, index)
+    opts = p["options"] or {}
+    min_s, max_s = float(opts.get("min_duration", 30)), float(opts.get("max_duration", 60))
+    all_words = transcribe.all_words(transcribe.load(runner.transcript_path(pid)))
+    sents = runner.block_sentences(all_words, b)
+    if not sents:
+        raise HTTPException(422, "Bloco sem fala")
+    cands = selection.generate_candidates(sents, min(min_s, b.duration), max_s) or \
+        [selection.Candidate(sents[0].start, sents[-1].end, sents)]
+    for c in cands:
+        selection.score_candidate(c, runner.load_profile(pid), (min_s, max_s))
+    selection.apply_blocks(cands, [b])
+    best = max(cands, key=lambda c: c.score).as_dict()
+    cid = db.new_id()
+    db.execute(
+        "INSERT INTO clips (id, project_id, rank, start, end, text, category, score, scores_json, reasons_json, "
+        "selected, status, created_at, layout, block_index) VALUES (?,?,?,?,?,?,?,?,?,?,1,'selected',?,?,?)",
+        (cid, pid, 0, best["start"], best["end"], best["text"], best["category"], best["score"],
+         json.dumps(best["scores"]), json.dumps(["Escolhido por você no mapa do episódio"] + best["reasons"],
+                                                ensure_ascii=False), db.now(), opts.get("layout", "auto"), b.index))
+    if p["status"] not in ACTIVE_STATUSES:
+        db.update("projects", pid, status="awaiting_review", stage="Aguardando sua revisão")
+    return {"clip_id": cid, "project": get_project(pid)}
+
+
+@router.post("/{pid}/map/{index}/series")
+def series_from_block(pid: str, index: int):
+    """Cria (ou refaz) uma série Parte 1, 2… com a história deste bloco."""
+    p = get_project_or_404(pid)
+    if p["status"] in ACTIVE_STATUSES:
+        raise HTTPException(409, "Aguarde o processamento atual terminar")
+    b = _block_or_404(pid, index)
+    opts = p["options"] or {}
+    all_words = transcribe.all_words(transcribe.load(runner.transcript_path(pid)))
+    ids = runner.create_series(pid, b, opts, all_words)
+    if not ids:
+        raise HTTPException(422, f"Esta história não dá para dividir em partes de {opts.get('min_duration', 30):.0f}"
+                                 f"–{opts.get('max_duration', 60):.0f} s (curta demais ou longa demais).")
+    db.update("projects", pid, status="awaiting_review", stage="Aguardando sua revisão")
+    return {"clip_ids": ids, "project": get_project(pid)}

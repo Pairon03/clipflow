@@ -10,7 +10,7 @@ import { applyPreferences, preferencesFrom, DURATION_PRESETS, COUNT_PRESETS } fr
 const defaults = () => ({
   count: 5, customCount: 7, durationPreset: '30-60', minDuration: 30, maxDuration: 60,
   caption_style: 'classic', layout: 'auto', engine: 'ffmpeg', hook: true, zoom: true, pace: 'tiktok', speed: 1.0,
-  title_style: 'tweet', title_duration: 'inteiro', title_position: 'meio', cold_open: true, color_filter: 'nenhum',
+  title_style: 'tweet', title_duration: 'inteiro', title_position: 'meio', cold_open: true, series: true, color_filter: 'nenhum',
   transition: 'zoom', zoom_fx: true, flip_fx: true, sfx: 'sutil', censor: 'mudo',
 })
 const form = reactive(defaults())

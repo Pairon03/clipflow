@@ -9,7 +9,7 @@ import numpy as np
 
 from .. import config, db, storage
 from . import audio as audio_mod
-from . import censor, ffmpeg, hooks, llm, metadata, render, selection, transcribe, youtube
+from . import censor, episode, ffmpeg, hooks, llm, metadata, render, selection, series, transcribe, youtube
 from .context import JobContext
 from .errors import Cancelled, FatalPipelineError, PipelineError
 
@@ -29,6 +29,31 @@ def transcript_path(pid: str) -> Path:
 
 def profile_path(pid: str) -> Path:
     return storage.area_dir("transcripts", pid) / "audio_energy.npz"
+
+
+def map_path(pid: str) -> Path:
+    return storage.area_dir("transcripts", pid) / "episode_map.json"
+
+
+def episode_map(pid: str, transcript: dict, profile: dict | None, ctx: JobContext | None = None) -> list:
+    """Mapa do episódio (blocos de assunto/história), reaproveitado enquanto a transcrição não mudar."""
+    # sem ctx (ex.: "refazer seleção" pela API, que responde na hora) a IA não roda: usa o mapa salvo ou só regras
+    use_ai = ctx is not None and llm.enabled() and int(config.get("ai.map_blocks")) > 0
+    tpath = transcript_path(pid)
+    mtime = tpath.stat().st_mtime if tpath.exists() else 0.0
+    blocks = episode.load(map_path(pid), mtime, need_ai=use_ai)
+    if blocks is not None or (ctx is None and map_path(pid).exists() and
+                              (blocks := episode.load(map_path(pid), None)) is not None):
+        return blocks
+    if ctx:
+        ctx.stage = "Mapeando os assuntos do episódio" + (" (IA local)" if use_ai else "")
+        ctx.progress(0.1)
+    blocks = episode.build(transcript, profile, use_llm=use_ai, max_ai_blocks=int(config.get("ai.map_blocks")),
+                           log=ctx.log if ctx else None)
+    episode.save(map_path(pid), blocks, mtime, use_ai)
+    if ctx:
+        ctx.log.info("Mapa do episódio: %d blocos (%s)", len(blocks), "regras + IA" if use_ai else "regras")
+    return blocks
 
 
 def load_profile(pid: str) -> dict | None:
@@ -124,8 +149,9 @@ def select_clips(pid: str, transcript: dict, opts: dict, ctx: JobContext | None 
     count = int(opts.get("count", 5))
     min_s, max_s = float(opts.get("min_duration", 30)), float(opts.get("max_duration", 60))
     profile = load_profile(pid)
+    blocks = episode_map(pid, transcript, profile, ctx)
     chosen, alternatives = selection.find_clips(transcript, count, min_s, max_s, profile,
-                                                style=opts.get("style", "podcast_premium"))
+                                                style=opts.get("style", "podcast_premium"), blocks=blocks)
     if not chosen:
         raise FatalPipelineError("Não foram encontrados trechos com a duração pedida. "
                                  "Tente uma faixa de duração diferente.")
@@ -162,20 +188,94 @@ def select_clips(pid: str, transcript: dict, opts: dict, ctx: JobContext | None 
             d = cand.as_dict()
             c.execute(
                 "INSERT INTO clips (id, project_id, rank, start, end, text, category, score, scores_json, "
-                "reasons_json, selected, status, created_at, layout) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "reasons_json, selected, status, created_at, layout, block_index) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (db.new_id(), pid, rank, d["start"], d["end"], d["text"], d["category"], d["score"],
                  json.dumps(d["scores"]), json.dumps(d["reasons"], ensure_ascii=False), sel,
-                 "selected" if sel else "candidate", now, opts.get("layout", "auto")),
+                 "selected" if sel else "candidate", now, opts.get("layout", "auto"), d.get("block")),
             )
+    made = auto_series(pid, blocks, opts, transcribe.all_words(transcript), ctx)
     if ctx:
-        ctx.log.info("%d cortes selecionados, %d alternativas (motor: %s)", len(chosen), len(alternatives), engine)
+        ctx.log.info("%d cortes selecionados, %d alternativas, %d série(s) (motor: %s)", len(chosen),
+                     len(alternatives), made, engine)
     if opts.get("cold_open", False) and ctx:  # só na fila: a reseleção pela API é síncrona (gancho sai no render)
         ctx.span(*ctx._span, "Escolhendo ganchos")
         all_words = transcribe.all_words(transcript)
         for clip in db.fetch_all("SELECT * FROM clips WHERE project_id = ? AND selected = 1 AND status = 'selected' "
                                  "ORDER BY start", (pid,)):
+            if (clip.get("series") or {}).get("part", 1) > 1:
+                continue                    # da Parte 2 em diante não há gancho (abre com a retomada)
             ensure_hook(clip, render.words_for_clip(all_words, clip["start"], clip["end"]), opts, ctx)
     return [c.as_dict() for c in chosen]
+
+
+def block_sentences(all_words: list[dict], block) -> list:
+    words = [w for w in all_words if w["start"] >= block.start - 0.05 and w["end"] <= block.end + 0.05]
+    return selection.build_sentences(words, max_sentence_s=25.0) if words else []
+
+
+def create_series(pid: str, block, opts: dict, all_words: list[dict], auto: bool = False,
+                  parts: list[dict] | None = None) -> list[str]:
+    """Cria as partes de uma série a partir de um bloco do mapa. Devolve os ids dos cortes criados.
+
+    Cortes comuns (ainda não renderizados) que caem dentro da história saem da seleção: a série os substitui.
+    """
+    min_s, max_s = float(opts.get("min_duration", 30)), float(opts.get("max_duration", 60))
+    sents = block_sentences(all_words, block)
+    parts = parts if parts is not None else series.plan(sents, min_s, max_s)
+    if not parts:
+        return []
+    sid = db.new_id()
+    now = db.now()
+    ids = []
+    with db.conn() as c:
+        for row in c.execute("SELECT id, series_json FROM clips WHERE project_id = ? AND series_json IS NOT NULL "
+                             "AND status != 'done'", (pid,)).fetchall():
+            if (json.loads(row["series_json"]) or {}).get("block") == block.index:
+                c.execute("DELETE FROM clips WHERE id = ?", (row["id"],))       # série refeita para o mesmo bloco
+        c.execute("UPDATE clips SET selected = 0, status = 'candidate' WHERE project_id = ? AND status = 'selected' "
+                  "AND series_json IS NULL AND start < ? AND end > ?", (pid, block.end, block.start))
+        for k, part in enumerate(parts, start=1):
+            text = " ".join(s.text for s in sents[part["first"]:part["last"] + 1])
+            info = {"id": sid, "part": k, "total": len(parts), "block": block.index, "auto": auto,
+                    "story": [round(block.start, 3), round(block.end, 3)], "recap": part["recap"],
+                    "cliff": part["cliff"], "title": block.title}
+            reasons = [f"Série: parte {k} de {len(parts)}" + (" (sugerida automaticamente)" if auto else ""),
+                       f"Bloco: {block.title or block.kind} (nota do bloco {round(block.score)})"]
+            if part["recap"]:
+                reasons.append("começa repetindo a última frase da parte anterior (retomada)")
+            if part["cliff"] is not None:
+                reasons.append("termina num ponto de suspense")
+            cid = db.new_id()
+            c.execute(
+                "INSERT INTO clips (id, project_id, rank, start, end, text, category, score, scores_json, reasons_json, "
+                "selected, status, created_at, layout, block_index, series_json) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,1,'selected',?,?,?,?)",
+                (cid, pid, -100 + k, round(part["start"], 3), round(part["end"], 3), text, "História",
+                 round(block.score, 1), json.dumps({"historia": round(block.score / 100, 3)}),
+                 json.dumps(reasons, ensure_ascii=False), now, opts.get("layout", "auto"), block.index,
+                 json.dumps(info, ensure_ascii=False)))
+            ids.append(cid)
+    return ids
+
+
+def auto_series(pid: str, blocks: list, opts: dict, all_words: list[dict], ctx: JobContext | None = None) -> int:
+    """Transforma em série só as histórias que valem a pena (no máximo duas por episódio)."""
+    if not opts.get("series", True):
+        return 0
+    max_s = float(opts.get("max_duration", 60))
+    made = 0
+    for b in sorted(blocks, key=lambda b: -b.score):
+        if made >= series.AUTO_MAX_SERIES or b.score < series.AUTO_MIN_BLOCK_SCORE:
+            break
+        if b.duration < max_s * 1.25:
+            continue
+        parts = series.plan(block_sentences(all_words, b), float(opts.get("min_duration", 30)), max_s)
+        ok, why = series.worth_it(b, parts, max_s)
+        if ctx:
+            ctx.log.info("Série no bloco %d (%s): %s — %s", b.index, b.title, "sim" if ok else "não", why)
+        if ok and create_series(pid, b, opts, all_words, auto=True, parts=parts):
+            made += 1
+    return made
 
 
 def ensure_hook(clip: dict, words: list[dict], opts: dict, ctx: JobContext | None = None) -> dict | None:
@@ -318,6 +418,28 @@ def _render_with_concat(exe: Path, src: Path, info: dict, clip: dict, words: lis
     }
 
 
+def _series_meta(p: dict, clip: dict, part: dict, all_words: list[dict]) -> dict:
+    """Textos de uma parte de série: os mesmos títulos/descrição para todas as partes, com "(Parte k/n)".
+
+    A base vem da história inteira e é salva nas outras partes, para a série não ficar com títulos diferentes.
+    """
+    base = part.get("base")
+    if not base:
+        siblings = db.fetch_all("SELECT id, series_json FROM clips WHERE project_id = ? AND series_json IS NOT NULL",
+                                (clip["project_id"],))
+        same = [(r["id"], r["series"]) for r in siblings if (r["series"] or {}).get("id") == part["id"]]
+        base = next((s["base"] for _, s in same if s.get("base")), None)
+        if not base:
+            a, b = part["story"]
+            text = " ".join(w["text"] for w in render.words_for_clip(all_words, a, b))
+            base = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
+            for cid, s in same:
+                db.update("clips", cid, series_json=s | {"base": base})
+    k, n = part["part"], part["total"]
+    return base | {"titles": [series.part_title(t, k, n) for t in base["titles"]],
+                   "description": series.part_description(base["description"], k, n)}
+
+
 def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
     p = _project(pid)
     opts = p["options"] or {}
@@ -353,11 +475,18 @@ def run_render(pid: str, clip_ids: list[str] | None, ctx: JobContext) -> dict:
         words = clip["words"] or render.words_for_clip(all_words, clip["start"], clip["end"])
         last_exc: Exception | None = None
         text = " ".join(w["text"] for w in words)
-        meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
+        part = clip.get("series")
+        if part:
+            meta = _series_meta(p, clip, part, all_words)
+        else:
+            meta = metadata.generate(text, p["source_title"] or p["name"], clip["category"])
         if opts.get("censor", "nenhum") != "nenhum":
             meta = censor.censor_meta(meta)  # palavrões mascarados também nos títulos e na descrição
         clip_opts = _clip_options(opts, meta, clip, order.index(clip["id"]) if clip["id"] in order else i)
-        clip_opts |= _hook_options(clip, words, opts, ctx)
+        if part:
+            clip_opts["series_label"] = f"PARTE {part['part']}/{part['total']}"
+        if not part or part["part"] == 1:      # da Parte 2 em diante o vídeo abre com a retomada, sem gancho
+            clip_opts |= _hook_options(clip, words, opts, ctx)
         for attempt in range(2):
             try:
                 result = _render_one(src, info, clip, words, clip_opts, meta, out_dir, sub_dir, work_dir, ctx)

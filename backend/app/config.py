@@ -44,6 +44,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "ollama_model": "llama3.2:3b",
         "ollama_timeout_s": 120,
         "hook_timeout_s": 180,   # avaliação de ganchos pela IA; acima disso usa só a heurística
+        "map_blocks": 8,         # quantos blocos do mapa do episódio a IA avalia (0 = só regras)
     },
     "render": {
         "width": 1080,
@@ -86,6 +87,7 @@ EDITABLE: dict[str, type] = {
     "ai.ollama_url": str,
     "ai.ollama_model": str,
     "ai.hook_timeout_s": int,
+    "ai.map_blocks": int,
     "render.video_preset": str,
     "render.crf": int,
     "render.loudnorm": bool,
@@ -202,6 +204,8 @@ def coerce(key: str, value: Any) -> Any:
         raise ValueError("Tempo da IA para ganchos deve ficar entre 10 e 600 s")
     if key == "youtube.times":
         parse_times(v)
+    if key == "ai.map_blocks" and not 0 <= v <= 30:
+        raise ValueError("Blocos avaliados pela IA deve ficar entre 0 e 30")
     if key == "limits.max_concurrent_jobs" and not 1 <= v <= 8:
         raise ValueError("Tarefas simultâneas deve estar entre 1 e 8")
     return v

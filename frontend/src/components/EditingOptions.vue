@@ -54,6 +54,7 @@ defineProps({ form: { type: Object, required: true }, meta: Object, wide: Boolea
       </div>
       <div class="mt-3 space-y-2 text-sm">
         <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Gancho: começar pela fala mais forte</span><input v-model="form.cold_open" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
+        <label class="flex items-center justify-between gap-3"><span class="text-ink-200">Séries (Parte 1, 2…) nas melhores histórias<span class="block text-xs text-ink-500">Só quando a história é forte e longa demais para um corte; no máximo 2 por episódio</span></span><input v-model="form.series" type="checkbox" class="h-4 w-4 accent-violet-500" /></label>
       </div>
     </div>
 

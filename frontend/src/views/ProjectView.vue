@@ -12,6 +12,7 @@ import PublishDialog from '../components/PublishDialog.vue'
 import TitleStylePicker from '../components/TitleStylePicker.vue'
 import FilterPicker from '../components/FilterPicker.vue'
 import EffectsOptions from '../components/EffectsOptions.vue'
+import EpisodeMap from '../components/EpisodeMap.vue'
 
 const props = defineProps({ id: String })
 const router = useRouter()
@@ -203,6 +204,9 @@ async function remove() {
         </div>
         <p class="mt-2 text-xs text-ink-500">Refaz os vídeos e também as descrições, sem transcrever de novo.</p>
       </section>
+
+      <EpisodeMap v-if="p.has_transcript && !active" :project-id="p.id" :busy="!canEdit || acting"
+                  :version="p.clips.length + ':' + p.updated_at" @changed="load" />
 
       <!-- revisão -->
       <section v-if="p.has_transcript">

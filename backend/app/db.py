@@ -146,6 +146,8 @@ def _connect() -> sqlite3.Connection:
 # Colunas acrescentadas depois da 1ª versão (só adições: versões antigas do app as ignoram)
 MIGRATIONS = [
     ("clips", "hook_json", "TEXT"),   # ganchos: candidatos, notas, escolha manual (pipeline/hooks.py)
+    ("clips", "block_index", "INTEGER"),   # bloco do mapa do episódio de onde o corte saiu (pipeline/episode.py)
+    ("clips", "series_json", "TEXT"),      # parte de série: {id, part, total, block, story, recap, base}
 ]
 
 

@@ -249,3 +249,37 @@ def render_card(style: str, card: dict, out: Path, width: int, height: int, posi
             img = moved
     img.save(out, "PNG", optimize=True)
     return out
+
+
+def series_tag(label: str, width: int) -> Image.Image:
+    """Tarja vermelha "PARTE 2/3" (séries)."""
+    f = _font("Poppins-ExtraBold.ttf", int(width * 0.042))
+    pad_x, pad_y = int(width * 0.03), int(width * 0.014)
+    tw = int(f.getlength(label))
+    asc, desc = f.getmetrics()
+    w, h = tw + 2 * pad_x, asc + desc + 2 * pad_y
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=h // 3, fill=(229, 30, 42, 245))
+    d.text((pad_x, pad_y - int(desc * 0.2)), label, font=f, fill=(255, 255, 255))
+    return img
+
+
+def add_series_tag(card_png: Path | None, label: str, out: Path, width: int, height: int, band: int = 0) -> Path:
+    """Desenha a tarja da série logo abaixo do título (ou no topo, se não houver título) e devolve o PNG."""
+    if card_png and Path(card_png).is_file():
+        with Image.open(card_png) as im:
+            canvas = im.convert("RGBA")
+    else:
+        canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    tag = series_tag(label, width)
+    margin = int(width * 0.06)
+    if band:
+        y = band + int(height * 0.015)
+    else:
+        bbox = canvas.getchannel("A").getbbox()
+        y = (bbox[3] + int(height * 0.012)) if bbox and bbox[1] < height * 0.5 else int(height * 0.085)
+    canvas.alpha_composite(tag, (width - margin - tag.width, min(y, height - tag.height - margin)))
+    out = Path(out)
+    canvas.save(out)
+    return out

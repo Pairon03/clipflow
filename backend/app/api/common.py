@@ -145,6 +145,7 @@ def validate_options(raw: dict | None) -> dict:
         "title_duration": title_duration,
         "title_position": title_position,
         "cold_open": bool(raw.get("cold_open", True)),
+        "series": bool(raw.get("series", True)),   # histórias fortes e longas viram série (Parte 1, 2…)
         "color_filter": color_filter,
         "transition": transition,
         "zoom_fx": bool(raw.get("zoom_fx", True)),
