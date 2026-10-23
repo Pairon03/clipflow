@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **175 testes automatizados:
-173 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **191 testes automatizados:
+189 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -92,6 +92,20 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Escolha dos zooms pela IA local (Ollama) | ⏳ | hoje a escolha é heurística, pela fala |
 | Correção de cor por estilo, transições, estabilização | ⏳ | próximos passos com as ferramentas do Concat |
 | Instalador do Concat para Windows | ⏳ | você instala o Concat separadamente (download oficial) |
+
+## Fase 3 — Seleção por história
+
+| Funcionalidade | Status | Observações |
+|---|---|---|
+| Cortes espalhados pelo episódio (fim do empate que favorecia o começo) | ✅ | medido nas 2 transcrições reais |
+| Mapa do episódio: blocos de assunto/história com nota do bloco inteiro | ✅ | 84 e 93 blocos em 2–4 s; propaganda e abertura detectadas |
+| Avaliação dos blocos pela IA local (título, resumo, desfecho, nota) | ✅ | qwen2.5:7b real: ~96 s por bloco em CPU |
+| Cortes nascem nos melhores blocos, um por assunto | ✅ | |
+| Mapa na página do projeto (Corte / Série por assunto) | ✅ | conferido no navegador com transcrição real |
+| Séries automáticas só para histórias fortes e longas | ✅ | regras + IA; no máximo 2 por episódio |
+| Partes que terminam em suspense, retomada, tarja PARTE k/n | ✅ | tarja conferida no quadro do vídeo renderizado |
+| Publicação das partes em ordem | ✅ | |
+| Enquadramento: troca de câmera, salto confirmado, quem fala normalizado | 🧪 | testado com dados sintéticos; **falta conferir em podcast com várias câmeras** |
 
 ## Publicação
 

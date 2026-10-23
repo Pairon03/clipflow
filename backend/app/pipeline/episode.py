@@ -268,7 +268,7 @@ def _describe(b: Block, common: set[str]) -> None:
     b.summary = f"“{quote.rstrip('.')}”" if quote else ""
 
 
-def build(transcript: dict, profile: dict | None = None, use_llm: bool = False, max_ai_blocks: int = 8,
+def build(transcript: dict, profile: dict | None = None, use_llm: bool = False, max_ai_blocks: int = 6,
           log=None) -> list[Block]:
     words = [w for seg in transcript.get("segments", []) for w in seg.get("words", [])]
     if not words:

@@ -31,7 +31,7 @@ A causa **não** era a IA "não entender" o fim do episódio:
    voz. Propaganda ("cupom", "link na descrição", "se inscreve"…) e abertura/encerramento ("boa noite", "sejam
    bem-vindos", "até a próxima") derrubam a nota. A nota final é a **posição do bloco no episódio** (0–100),
    então usa a escala inteira.
-3. **IA local (opcional)**: os 8 melhores blocos (ajustável em Configurações, 0 desliga) vão inteiros para o
+3. **IA local (opcional)**: os 6 melhores blocos (ajustável em Configurações, 0 desliga) vão inteiros para o
    Ollama, que devolve título, resumo de uma linha, nota 0–100 pelo "teste dos 2 segundos", se tem desfecho e se
    se entende sozinho. Nota final do bloco = metade regras, metade IA.
 4. **Seleção**: nota do corte = 45% nota local da janela + 55% nota do bloco; +5 se o corte começa onde o
@@ -87,3 +87,26 @@ detecção de legenda queimada, ganchos por visão) e a parte comercial. O OpenS
 | Trechos empatados na nota máxima | 59 / 151 | 0 |
 | Mapa do episódio | — | 84 e 93 assuntos em 2–4 s |
 | Séries automáticas (ep. 2) | — | 2 (2 e 3 partes) |
+
+## Teste com a IA local real (qwen2.5:7b, CPU de 4 núcleos, sem GPU)
+
+Os 6 melhores assuntos do episódio 2 avaliados pelo Ollama: **578 s no total (~96 s por assunto)**, já contando o
+carregamento do modelo. Resultado:
+
+| Assunto (min) | Regras | IA | Desfecho? | Título da IA |
+|---|---|---|---|---|
+| 111,0 | 97 | 82 | sim | Reflexo e experiências |
+| 133,2 | 98 | 78 | sim | Recuperação e amizade |
+| 39,4 | 100 | 55 | não | Auxílio emergencial e opiniões |
+| 45,2 | 99 | 55 | não | Gordura e Metabolismo |
+| 46,3 | 96 | 55 | não | Treino noturno e dificuldade de dormir |
+| 138,2 | 95 | 55 | não | Conversa sobre amizade |
+
+- Os títulos e resumos da IA são bem melhores que os das regras ("Senti", "BGS").
+- A IA separou o que as regras empatavam: histórias com desfecho subiram, conversas sem conclusão desceram.
+- A série automática do bloco "Auxílio" (criada só com as regras) **não** é criada com a IA ligada, porque a IA
+  disse que a história não tem desfecho — o comportamento pedido: só vira série o que vale a pena.
+- O modelo de 7B tende a repetir a mesma nota (55) para vários blocos medianos; por isso a nota final é metade
+  regras, metade IA.
+- Em CPU, cada assunto leva ~1,5 min: o padrão é avaliar 6 (≈ 9 min a mais por episódio). Com placa de vídeo é
+  bem mais rápido. Em Configurações, "Assuntos do episódio avaliados pela IA" = 0 desliga.

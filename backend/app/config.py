@@ -44,7 +44,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "ollama_model": "llama3.2:3b",
         "ollama_timeout_s": 120,
         "hook_timeout_s": 180,   # avaliação de ganchos pela IA; acima disso usa só a heurística
-        "map_blocks": 8,         # quantos blocos do mapa do episódio a IA avalia (0 = só regras)
+        "map_blocks": 6,         # quantos blocos do mapa do episódio a IA avalia (0 = só regras)
     },
     "render": {
         "width": 1080,

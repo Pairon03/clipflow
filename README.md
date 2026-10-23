@@ -67,7 +67,11 @@ cp config.example.toml config.toml
 6. Marque *"Revisar cortes antes de renderizar"* se quiser ouvir as prévias, ajustar início/fim, corrigir a
    legenda, trocar por alternativas ou mudar o enquadramento antes de renderizar.
 7. Baixe cada Short (MP4 + SRT) ou tudo em ZIP — o ZIP inclui um arquivo com os títulos e descrições sugeridos.
-8. **Publicar no YouTube**: na Biblioteca, marque os Shorts e clique em *Publicar no YouTube* (agendar, privado, não
+8. **Mapa do episódio e séries**: na página do projeto, o *Mapa do episódio* mostra os assuntos do vídeo com nota,
+   título e resumo; os cortes saem dos melhores assuntos, espalhados pelo episódio. Histórias fortes e longas viram
+   série (Parte 1, 2…) automaticamente — só as que valem a pena — e qualquer outra pode virar série pelo botão
+   *Série*. Detalhes em [docs/FASE3_MAPA_E_SERIES.md](docs/FASE3_MAPA_E_SERIES.md).
+9. **Publicar no YouTube**: na Biblioteca, marque os Shorts e clique em *Publicar no YouTube* (agendar, privado, não
    listado ou público). Configuração única de ~15 min na aba **Publicar** — passo a passo em
    [docs/PUBLICAR.md](docs/PUBLICAR.md). Para o TikTok, o botão *Legenda TikTok* copia título + descrição + hashtags.
 
@@ -258,7 +262,7 @@ clipflow-studio/
 │   │   │   ├── branding.py    nome, @ e logo do seu canal
 │   │   │   └── runner.py      orquestra análise e renderização
 │   │   └── assets/          modelos de rosto (BlazeFace, Haar) e fontes (Poppins, Anton — OFL)
-│   └── tests/               175 testes (pytest), incluindo ponta a ponta com vídeo real
+│   └── tests/               191 testes (pytest), incluindo ponta a ponta com vídeo real
 ├── frontend/                Vue 3 + Vite + Tailwind CSS
 ├── ClipFlowStudio/          dados (criado na 1ª execução)
 │   ├── projects/<id>/  downloads/<id>/  transcripts/<id>/  clips/<id>/
@@ -282,7 +286,7 @@ limite de tamanho e validação por FFprobe; servidor ouve só em `127.0.0.1` po
 ```bash
 cd backend
 pip install -r requirements-dev.txt
-python -m pytest            # 175 testes (~8 min; gera vídeos de teste com FFmpeg)
+python -m pytest            # 191 testes (~8 min; gera vídeos de teste com FFmpeg)
 python -m app --no-browser  # API em :8000
 
 cd ../frontend
