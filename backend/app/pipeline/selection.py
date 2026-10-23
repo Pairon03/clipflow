@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -184,8 +185,7 @@ def score_candidate(c: Candidate, profile: dict | None, target: tuple[float, flo
     cat_hits: dict[str, int] = {}
     for cat, markers in MARKERS.items():
         if cat == "Pergunta e resposta":
-            q = sum(1 for s in c.sentences[:-1] if s.is_question)
-            hits = 2 * q if q and not last.is_question else 0  # estrutura mais marcante que palavras soltas
+            hits = 2 if _asks_and_answers(c) else 0   # estrutura mais marcante que palavras soltas
         else:
             hits = sum(ntext.count(norm(m)) for m in markers)
         if hits:
@@ -243,8 +243,30 @@ def score_candidate(c: Candidate, profile: dict | None, target: tuple[float, flo
     if cat_hits:
         reasons.insert(1 if positives else 0, f"Tipo de trecho: {category.lower()}")
 
-    c.scores, c.score, c.category, c.reasons = scores, round(total * 100, 1), category, reasons
+    # sem arredondar: notas arredondadas empatavam às dezenas e o desempate virava a ordem do tempo
+    c.scores, c.score, c.category, c.reasons = scores, total * SCORE_SCALE, category, reasons
     return c
+
+
+SCORE_SCALE = 96.0     # nota base vai até 96; o bônus de estilo (+4) completa 100 sem estourar o teto
+STYLE_BONUS = 4.0
+QA_MIN_ANSWER_S = 8.0
+
+
+def _asks_and_answers(c: Candidate) -> bool:
+    """Pergunta de verdade: pergunta curta na 1ª metade do corte seguida de resposta (≥ 8 s ou 40% do corte).
+
+    Antes, qualquer "?" no meio da conversa contava, e 58% dos candidatos viravam "Pergunta e resposta".
+    """
+    questions = [i for i, s in enumerate(c.sentences[:-1]) if s.is_question]
+    if not questions or len(questions) > 3 or c.sentences[-1].is_question:
+        return False
+    i = questions[0]
+    q = c.sentences[i]
+    if len(q.words) > 25 or q.start - c.start > 0.5 * c.duration:
+        return False
+    answer = [s for s in c.sentences[i + 1:] if not s.is_question]
+    return sum(s.end - s.start for s in answer) >= min(QA_MIN_ANSWER_S, 0.4 * c.duration)
 
 
 def _overlap(a: Candidate | dict, b: Candidate | dict) -> float:
@@ -253,15 +275,38 @@ def _overlap(a: Candidate | dict, b: Candidate | dict) -> float:
     return max(0.0, min(ea, eb) - max(sa, sb))
 
 
-def select(cands: list[Candidate], count: int, min_gap: float = 1.0) -> tuple[list[Candidate], list[Candidate]]:
-    """Escolhe `count` cortes sem sobreposição + até 30 alternativas também sem sobreposição entre si."""
-    ranked = sorted(cands, key=lambda c: c.score, reverse=True)
+COVERAGE_WINDOW_S = 20 * 60   # cortes espalhados: limite de cortes por trecho de 20 min do episódio
+
+
+def _rank_key(c: Candidate) -> tuple:
+    # empate exato: decide o interesse e a retenção, nunca a posição no vídeo
+    return (-c.score, -c.scores.get("interesse", 0), -c.scores.get("retencao", 0), -c.duration)
+
+
+def select(cands: list[Candidate], count: int, min_gap: float = 1.0,
+           total_s: float | None = None) -> tuple[list[Candidate], list[Candidate]]:
+    """Escolhe `count` cortes sem sobreposição + até 30 alternativas também sem sobreposição entre si.
+
+    Em episódios longos, no máximo `per_window` cortes por trecho de 20 min na 1ª passada (os melhores de cada
+    parte do episódio); se faltar corte, a 2ª passada completa sem esse limite.
+    """
+    ranked = sorted(cands, key=_rank_key)
+    total_s = total_s if total_s is not None else max((c.end for c in cands), default=0.0)
+    per_window = max(1, math.ceil(count * COVERAGE_WINDOW_S / total_s)) if total_s > COVERAGE_WINDOW_S else count
     chosen: list[Candidate] = []
-    for c in ranked:
-        if len(chosen) >= count:
-            break
-        if all(c.end + min_gap <= o.start or c.start >= o.end + min_gap for o in chosen):
-            chosen.append(c)
+    used: dict[int, int] = {}
+    for limited in (True, False):
+        for c in ranked:
+            if len(chosen) >= count:
+                break
+            if c in chosen:
+                continue
+            win = int(c.start // COVERAGE_WINDOW_S)
+            if limited and used.get(win, 0) >= per_window:
+                continue
+            if all(c.end + min_gap <= o.start or c.start >= o.end + min_gap for o in chosen):
+                chosen.append(c)
+                used[win] = used.get(win, 0) + 1
     alternatives: list[Candidate] = []
     for c in ranked:
         if len(alternatives) >= 30:
@@ -299,5 +344,5 @@ def find_clips(transcript: dict, count: int, min_s: float, max_s: float,
     for c in cands:
         score_candidate(c, profile, (min_s, max_s))
         if c.category in preferred:
-            c.score = round(min(100.0, c.score + 4.0), 1)
-    return select(cands, count)
+            c.score += STYLE_BONUS
+    return select(cands, count, total_s=words[-1]["end"])

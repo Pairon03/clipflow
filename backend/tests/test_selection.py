@@ -88,3 +88,50 @@ def test_short_material_relaxes_minimum():
     t = make_transcript(SENTS[:2])
     chosen, _ = selection.find_clips(t, 3, 30, 60)
     assert len(chosen) >= 1
+
+
+def _long_episode(minutes=120, block_s=40.0):
+    """Episódio sintético: o mesmo bloco bom repetido; todos os candidatos empatam em conteúdo."""
+    from app.pipeline import selection
+
+    text = ("Deixa eu te contar uma história incrível. Eu perdi tudo em um dia. Sabe o que eu fiz? "
+            "Eu comecei de novo do zero e aprendi a maior lição da minha vida.").split()
+    words, t = [], 0.0
+    while t < minutes * 60:
+        step = block_s / (len(text) + 4)
+        for w in text:
+            words.append({"text": w, "start": t, "end": t + step * 0.8, "prob": 0.95})
+            t += step
+        t += 4 * step
+    return {"segments": [{"start": 0, "end": t, "text": "", "words": words}]}, selection
+
+
+def test_ties_do_not_favor_the_beginning():
+    t, selection = _long_episode()
+    chosen, _ = selection.find_clips(t, 5, 30, 60)
+    starts = sorted(c.start / 60 for c in chosen)
+    assert len(chosen) == 5
+    assert starts[-1] > 80                        # antes: os 5 primeiros minutos do vídeo
+    windows = {int(s // 20) for s in starts}
+    assert len(windows) == 5                      # um por trecho de 20 min
+    assert all(c.score <= 100 for c in chosen)
+
+
+def test_question_needs_a_real_answer():
+    from app.pipeline import selection
+
+    def cand(texts):
+        sents, t = [], 0.0
+        for tx in texts:
+            ws = []
+            for w in tx.split():
+                ws.append({"text": w, "start": t, "end": t + 0.3})
+                t += 0.35
+            sents.append(selection.Sentence(ws[0]["start"], ws[-1]["end"], ws, 0.6, 0.6))
+            t += 0.6
+        return selection.Candidate(sents[0].start, sents[-1].end, sents)
+
+    answer = "Porque eu trabalhei muito durante dez anos sem parar e guardei cada centavo que ganhei na vida."
+    assert selection._asks_and_answers(cand(["Como você ficou rico?", answer, answer]))
+    assert not selection._asks_and_answers(cand(["Né?", "Tá certo?", "É?", "Sério?", answer, answer]))  # papo solto
+    assert not selection._asks_and_answers(cand([answer, answer, "E aí, como foi?", "Foi bom."]))      # pergunta no fim

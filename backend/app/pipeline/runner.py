@@ -139,11 +139,13 @@ def select_clips(pid: str, transcript: dict, opts: dict, ctx: JobContext | None 
             engine = "ollama+heuristica"
             for i, c in enumerate(pool):
                 if i in result:
-                    c.score = round(0.7 * c.score + 0.3 * result[i]["nota"] * 10, 1)
+                    c.score = 0.7 * c.score + 0.3 * result[i]["nota"] * 10
                     c.scores["ia_local"] = result[i]["nota"] / 10
                     if result[i]["motivo"]:
                         c.reasons.append("IA local: " + result[i]["motivo"])
-            chosen, alternatives = selection.select(pool + [a for a in alternatives if a not in pool], count)
+            total_s = max((w["end"] for seg in transcript["segments"] for w in seg["words"]), default=0.0)
+            chosen, alternatives = selection.select(pool + [a for a in alternatives if a not in pool], count,
+                                                    total_s=total_s)
         elif ctx:
             ctx.log.warning("Ollama ativado mas indisponível; usando apenas o motor heurístico")
     now = db.now()
