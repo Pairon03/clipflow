@@ -36,6 +36,7 @@ class ClipPatch(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     hashtags: list[str] | None = None
     hook_choice: int | str | None = None   # índice do candidato, "none" (sem gancho) ou "auto"
+    headline: str | None = Field(default=None, max_length=90)   # manchete do estilo viral ("" = automática)
 
 
 @router.patch("/clips/{cid}")
@@ -79,6 +80,8 @@ def patch_clip(cid: str, body: ClipPatch):
         fields["titles_json"] = [t.strip()[:100] for t in body.titles if t.strip()][:3]
     if body.description is not None:
         fields["description"] = body.description
+    if body.headline is not None:
+        fields["headline"] = body.headline.strip() or None
     if body.hashtags is not None:
         fields["hashtags_json"] = [h.strip()[:40] for h in body.hashtags if h.strip()][:15]
     if "start" in fields:
@@ -96,7 +99,7 @@ def patch_clip(cid: str, body: ClipPatch):
         elif choice != "none":
             raise HTTPException(422, "Gancho inválido")
         fields["hook_json"] = hook | {"choice": choice}
-    edits_video = {"start", "end", "layout", "manual_x", "words_json", "hook_json"} & fields.keys()
+    edits_video = {"start", "end", "layout", "manual_x", "words_json", "hook_json", "headline"} & fields.keys()
     if edits_video and clip["status"] == "done":
         fields["render_info_json"] = (clip.get("render_info") or {}) | {"stale": True}
     if fields:
@@ -268,3 +271,15 @@ def concat_status():
     from ..pipeline import concat_bridge
 
     return concat_bridge.status()
+
+
+@router.get("/clips/{cid}/headline")
+def clip_headline(cid: str):
+    """Manchete automática do estilo viral (prévia para o editor do corte)."""
+    from ..pipeline import metadata, viral
+
+    clip = get_clip_or_404(cid)
+    project = get_project_or_404(clip["project_id"])
+    meta = metadata.heuristic(clip.get("text") or "", project.get("source_title") or project["name"],
+                              clip.get("category") or "")
+    return {"auto": viral.headline_text(meta.get("card")), "custom": clip.get("headline")}

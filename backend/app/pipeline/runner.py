@@ -355,8 +355,18 @@ def _clip_options(opts: dict, meta: dict, clip: dict, index: int | None) -> dict
     style = opts.get("title_style")
     if style is None:  # projetos antigos: "theme" ligado vira o cartão padrão
         style = "tweet" if opts.get("theme", True) else "nenhum"
+    from . import viral
+
+    part = clip.get("series") or {}
+    extra = {}
+    if opts.get("viral_headline") and part.get("part", 1) == 1:
+        # manchete escrita pelo usuário no editor do corte tem prioridade sobre a automática
+        extra["viral_headline_text"] = (clip.get("headline") or "").strip().upper() or \
+            viral.headline_text(meta.get("card"))
+    if opts.get("end_cta"):
+        extra["cta_text"] = viral.cta_text(clip.get("category"), part.get("part"), part.get("total"))
     return opts | {"title_style_resolved": overlay.resolve_style(style, clip["id"], index),
-                   "title_card": meta.get("card") or {}}
+                   "title_card": meta.get("card") or {}} | extra
 
 
 def _concat_enhancements(words_out: list[dict], duration: float, layout: str, opts: dict,

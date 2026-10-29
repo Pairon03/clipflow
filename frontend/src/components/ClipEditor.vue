@@ -47,6 +47,18 @@ function onTime() {
 }
 const previewX = computed(() => `${(layout.value === 'manual' ? manualX.value : 0.5) * 100}%`)
 
+// manchete do estilo viral: vazia = automática (tirada da fala)
+const headline = ref(props.clip.headline || '')
+const autoHeadline = ref('')
+watch(expanded, async (open) => {
+  if (open && props.project?.options?.viral_headline && !autoHeadline.value) {
+    autoHeadline.value = (await api(`/api/clips/${props.clip.id}/headline`).catch(() => ({}))).auto || ''
+  }
+})
+async function saveHeadline() {
+  await patch({ headline: headline.value }, headline.value ? 'Manchete salva' : 'Manchete automática')
+}
+
 async function patch(body, msg) {
   saving.value = true
   try {
@@ -171,6 +183,15 @@ function nudge(which, delta) {
             <button class="btn-primary mt-2 py-1.5 text-xs" :disabled="saving" @click="saveLayout"><Save class="h-3.5 w-3.5" /> Salvar posição</button>
           </div>
           <p v-if="clip.render_info?.layout" class="mt-2 text-xs text-ink-500">Último render: {{ LAYOUT_LABELS[clip.render_info.layout] }} · {{ clip.render_info.faces ?? 0 }} rosto(s) · {{ clip.render_info.detector || 'sem detector' }}<span v-if="clip.render_info.note"> · {{ clip.render_info.note }}</span></p>
+        </div>
+        <div v-if="project?.options?.viral_headline" class="rounded-xl border border-ink-700 bg-ink-850 p-3">
+          <label class="label" :for="`hl-${clip.id}`">Manchete de gancho (estilo viral)</label>
+          <div class="flex gap-2">
+            <input :id="`hl-${clip.id}`" v-model="headline" class="input py-1.5 text-sm uppercase" maxlength="90"
+                   :placeholder="autoHeadline ? `Automática: ${autoHeadline}` : 'Automática (tirada da fala)'" />
+            <button type="button" class="btn-secondary py-1.5 text-xs" :disabled="saving || busy" @click="saveHeadline">Salvar</button>
+          </div>
+          <p class="mt-1 text-xs text-ink-500">Deixe vazio para usar a automática. Aparece em letras grandes nos 2–3 primeiros segundos.</p>
         </div>
         <div v-if="project?.options?.cold_open">
           <span class="label">Gancho de abertura</span>

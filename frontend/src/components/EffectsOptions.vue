@@ -12,6 +12,17 @@ const sfxLevels = [
   { key: 'normal', name: 'Normal' },
   { key: 'nenhum', name: 'Desligado' },
 ]
+const dynamisms = [
+  { key: 'nenhum', name: 'Desligado' },
+  { key: 'medio', name: 'Médio' },
+  { key: 'alto', name: 'Alto' },
+]
+function viralAll(on, opts) {
+  opts.viral_headline = on
+  opts.intro_punch = on
+  opts.end_cta = on
+  opts.dynamism = on ? 'medio' : 'nenhum'
+}
 const censors = [
   { key: 'mudo', name: 'Mutar' },
   { key: 'bip', name: 'Bipe' },
@@ -51,5 +62,35 @@ const censors = [
       <span>Inversão momentânea da imagem<span class="block text-xs text-ink-500">Espelha por ~1 s e volta; uma vez por vídeo</span></span>
       <input v-model="opts.flip_fx" type="checkbox" class="h-4 w-4 accent-violet-500" />
     </label>
+    <div class="rounded-xl border border-ink-700 bg-ink-850 p-3" :class="{ 'sm:col-span-2': wide }">
+      <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <span class="label mb-0">Estilo viral (opcional)</span>
+        <div class="flex gap-1.5">
+          <button type="button" class="chip py-1 text-xs" @click="viralAll(true, opts)">Ligar tudo</button>
+          <button type="button" class="chip py-1 text-xs" @click="viralAll(false, opts)">Desligar</button>
+        </div>
+      </div>
+      <p class="mb-3 text-xs text-ink-500">Dicas de gancho para prender nos 3 primeiros segundos. Use quando quiser um corte mais chamativo; não precisa ser em todos.</p>
+      <div class="grid gap-3" :class="{ 'sm:grid-cols-2': wide }">
+        <label class="flex items-center justify-between gap-3 text-ink-200">
+          <span>Manchete de gancho<span class="block text-xs text-ink-500">Texto gigante nos 2–3 s iniciais, tirado da própria fala</span></span>
+          <input v-model="opts.viral_headline" type="checkbox" class="h-4 w-4 accent-violet-500" />
+        </label>
+        <label class="flex items-center justify-between gap-3 text-ink-200">
+          <span>Entrada com movimento<span class="block text-xs text-ink-500">Zoom rápido no 1º segundo</span></span>
+          <input v-model="opts.intro_punch" type="checkbox" class="h-4 w-4 accent-violet-500" />
+        </label>
+        <div>
+          <span class="text-ink-200">Mudar o enquadramento a cada frase</span>
+          <div class="mt-1.5 flex flex-wrap gap-2">
+            <button v-for="d in dynamisms" :key="d.key" type="button" class="chip py-1.5" :class="{ 'chip-active': (opts.dynamism || 'nenhum') === d.key }" @click="opts.dynamism = d.key">{{ d.name }}</button>
+          </div>
+        </div>
+        <label class="flex items-center justify-between gap-3 text-ink-200">
+          <span>Chamada final<span class="block text-xs text-ink-500">"Você concorda? Comenta aqui" nos últimos 3 s (séries: "Continua na Parte 2")</span></span>
+          <input v-model="opts.end_cta" type="checkbox" class="h-4 w-4 accent-violet-500" />
+        </label>
+      </div>
+    </div>
   </div>
 </template>

@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **191 testes automatizados:
-189 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **197 testes automatizados:
+195 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -106,6 +106,16 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Partes que terminam em suspense, retomada, tarja PARTE k/n | ✅ | tarja conferida no quadro do vídeo renderizado |
 | Publicação das partes em ordem | ✅ | |
 | Enquadramento: troca de câmera, salto confirmado, quem fala normalizado | 🧪 | testado com dados sintéticos; **falta conferir em podcast com várias câmeras** |
+
+## Estilo viral (opcional)
+
+| Funcionalidade | Status | Observações |
+|---|---|---|
+| Manchete de gancho (texto gigante nos 2–3 s iniciais, da própria fala, editável por corte) | ✅ | conferida no quadro renderizado |
+| Entrada com movimento (zoom no 1º segundo) | ✅ | |
+| Troca de enquadramento a cada frase (médio / alto) | ✅ | desligada no layout dividido |
+| Chamada final ("Você concorda? Comenta aqui"; séries: "Continua na Parte N") | ✅ | o título sai quando ela entra |
+| Tudo desligado por padrão, com "Ligar tudo" | ✅ | conferido no navegador |
 
 ## Publicação
 

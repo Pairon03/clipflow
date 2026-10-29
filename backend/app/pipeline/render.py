@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import censor, color, enhance, ffmpeg, framing, hooks, overlay, sfx, subtitles
+from . import censor, color, enhance, ffmpeg, framing, hooks, overlay, sfx, subtitles, viral
 from .context import JobContext
 from .errors import PipelineError
 
@@ -159,7 +159,8 @@ def _ease(x: str) -> str:
 
 
 def effects_filter(zooms: list[tuple[float, float]], transition: str | None, at: float | None,
-                   out_w: int, out_h: int, flip: tuple[float, float] | None = None) -> str | None:
+                   out_w: int, out_h: int, flip: tuple[float, float] | None = None,
+                   intro_punch: bool = False, framing: tuple[str, str, str] | None = None) -> str | None:
     """Efeitos de vídeo no tempo final: zooms de ênfase suaves, transição depois do gancho e uma
     inversão momentânea da imagem (espelho por ~1 s, uma vez por vídeo).
 
@@ -170,10 +171,15 @@ def effects_filter(zooms: list[tuple[float, float]], transition: str | None, at:
     if transition == "zoom" and at is not None:
         terms.append(f"{PUNCH_SCALE}*gte(t,{at:.3f})*pow(clip(1-(t-{at:.3f})/0.4,0,1),2)")
     chain = []
-    if terms:
-        z = f"(1+min({'+'.join(terms)},0.2))"
+    if terms or intro_punch or framing:
+        # estilo viral: enquadramento por frase (framing) × zoom de ênfase + soco de entrada (intro_punch)
+        base = f"({framing[0]})" if framing else "1"
+        z = f"({base}*(1+min({'+'.join(terms) or '0'},0.2))"
+        z += f"+{viral.PUNCH_SCALE}*pow(clip(1-t/{viral.PUNCH_S},0,1),3))" if intro_punch else ")"
+        cx = f"({framing[1]})" if framing else "0.5"
+        cy = f"({framing[2]})" if framing else f"{ZOOM_CENTER_Y}"
         chain.append(f"scale=w='trunc({out_w}*{z}/2)*2':h='trunc({out_h}*{z}/2)*2':eval=frame:flags=bicubic,"
-                     f"crop={out_w}:{out_h}:(iw-ow)/2:(ih-oh)*{ZOOM_CENTER_Y}")
+                     f"crop={out_w}:{out_h}:'(iw-ow)*{cx}':'(ih-oh)*{cy}'")
     if transition == "flash" and at is not None:
         chain.append(f"eq=brightness='0.55*max(0,1-abs(t-{at:.3f})/0.12)':eval=frame")
     elif transition == "fade" and at is not None:
@@ -188,7 +194,8 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
                       hook_len: float | None = None, overlay_input: int | None = None,
                       overlay_until: float | None = None, color_filter: str | None = None,
                       video_fx: str | None = None, mute: str | None = None, sfx_input: int | None = None,
-                      band_top: int = 0) -> str:
+                      band_top: int = 0, overlay_from: float = 0.0,
+                      big_texts: list[tuple[int, float, float]] | None = None) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
@@ -198,6 +205,8 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     `color_filter`: cadeia de filtros de cor aplicada ao vídeo antes do título e da legenda.
     `video_fx`: zooms/transição (effects_filter); `mute`: silencia palavrões; `sfx_input`: faixa de efeitos.
     `band_top`: altura (px) de uma faixa branca no topo; o vídeo é enquadrado na área abaixo dela.
+    `overlay_from`: o título só entra a partir deste instante (estilo viral: depois da manchete).
+    `big_texts`: (entrada, início, fim) de PNGs de texto grande (manchete/chamada) com "pop" de entrada.
     """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
@@ -221,13 +230,24 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
         parts.append(f"[vgr]{post_layout}[vlay]")
     if overlay_input is not None:
         # título (PNG transparente do tamanho do vídeo) com entrada suave; some no fim se for "só no início"
-        fade = "fade=t=in:st=0:d=0.3:alpha=1"
+        fade = f"fade=t=in:st={overlay_from:.3f}:d=0.3:alpha=1"
         if overlay_until:
             fade += f",fade=t=out:st={max(overlay_until - 0.3, 0):.3f}:d=0.3:alpha=1"
         parts.append(f"[{overlay_input}:v]format=rgba,{fade}[ttl]")
         parts.append("[vlay][ttl]overlay=0:0:format=auto:shortest=1[vl]")
     else:
         parts.append("[vlay]null[vl]")
+    cur = "vl"
+    for k, (idx, t0, t1) in enumerate(big_texts or []):
+        # entra crescendo de 115% para 100% em 0,18 s e some com fade de 0,2 s
+        pop = f"(1+0.15*clip(1-(t-{t0:.3f})/0.18,0,1))"
+        parts.append(f"[{idx}:v]format=rgba,fade=t=in:st={t0:.3f}:d=0.12:alpha=1,"
+                     f"fade=t=out:st={max(t1 - 0.2, t0):.3f}:d=0.2:alpha=1,"
+                     f"scale=w='trunc({out_w}*{pop}/2)*2':h='trunc({out_h}*{pop}/2)*2':eval=frame,"
+                     f"crop={out_w}:{out_h}:(iw-ow)/2:(ih-oh)/2[bt{k}]")
+        parts.append(f"[{cur}][bt{k}]overlay=0:0:enable='between(t,{t0:.3f},{t1:.3f})':"
+                     f"format=auto:shortest=1[vb{k}]")
+        cur = f"vb{k}"
     post = []
     if ass_path is not None:
         fonts = subtitles.ffmpeg_filter_path(config.FONTS_DIR)
@@ -235,7 +255,7 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     fo_start = max(out_duration - FADE_OUT, 0)
     post.append(f"fade=t=in:st=0:d={FADE_IN},fade=t=out:st={fo_start:.3f}:d={FADE_OUT}")
     post.append("format=yuv420p")
-    parts.append(f"[vl]{','.join(post)}[vout]")
+    parts.append(f"[{cur}]{','.join(post)}[vout]")
     audio = [f"atempo={speed:g}"] if speed != 1.0 else []  # acelera mantendo o tom de voz
     if mute:
         audio.append(mute)
@@ -395,18 +415,48 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         zooms = enhance.pick_zooms(out_words, out_duration, skip_start=hook_out + 0.8)
     flip = enhance.pick_flip(out_words, out_duration, avoid=[(0.0, hook_out + 1.0)] + zooms) \
         if options.get("flip_fx", False) else None
-    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band, flip)
+    # estilo viral (opcional): manchete, entrada com movimento, troca de enquadramento por frase, chamada final
+    headline_png = cta_png = None
+    if options.get("viral_headline") and options.get("viral_headline_text") and out_duration > 6:
+        headline_png = viral.big_text_png(options["viral_headline_text"], work_dir / f"{clip_id}{variant}.head.png",
+                                          out_w, out_h, y_center=0.5 if split else 0.27)
+    if options.get("end_cta") and options.get("cta_text") and out_duration > 10:
+        cta_png = viral.big_text_png(options["cta_text"], work_dir / f"{clip_id}{variant}.cta.png",
+                                     out_w, out_h, y_center=0.5 if split else 0.27)
+    head_end = min(viral.HEADLINE_S, out_duration / 3) if headline_png else 0.0
+    cta_start = out_duration - viral.CTA_S
+    dynamism = options.get("dynamism", "nenhum")
+    angle_times = viral.angle_changes(out_words, out_duration, dynamism, start_after=max(hook_out, 0.0)) \
+        if dynamism in viral.DYNAMISM and not split else []
+    framing_x = viral.framing_exprs(angle_times, dynamism)
+    intro_punch = bool(options.get("intro_punch"))
+    if headline_png and overlay_until:
+        overlay_until += head_end                       # título "só no início" entra depois da manchete
+    if cta_png and (overlay_until is None or overlay_until > cta_start):
+        overlay_until = cta_start                       # o título sai quando a chamada final entra
+    video_fx = effects_filter(zooms, transition, hook_out if hook else None, out_w, out_h - band, flip,
+                              intro_punch=intro_punch, framing=framing_x)
     sfx_path = sfx.build_track(out_duration, work_dir / f"{clip_id}{variant}.sfx.wav", options.get("sfx"),
                                whoosh_at=hook_out if hook and transition != "nenhuma" else None,
-                               pop_at=([0.05] if has_title else []) + [s for s, _ in zooms] + ([flip[0]] if flip else []),
+                               pop_at=([head_end + 0.05] if has_title else []) + [s for s, _ in zooms]
+                               + ([flip[0]] if flip else []) + ([0.03] if headline_png else [])
+                               + ([cta_start] if cta_png else []),
                                bips=muted if censor_mode == "bip" else None)
-    overlay_idx = (2 if hook else 1) if card_png else None
-    sfx_idx = (1 + bool(hook) + bool(card_png)) if sfx_path else None
+    nxt = 1 + bool(hook)
+    overlay_idx = nxt if card_png else None
+    nxt += bool(card_png)
+    big_texts = []
+    if headline_png:
+        big_texts.append((nxt, 0.0, head_end)); nxt += 1
+    if cta_png:
+        big_texts.append((nxt, cta_start, out_duration)); nxt += 1
+    sfx_idx = nxt if sfx_path else None
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
                               hook_len=(hook[1] - hook[0]) if hook else None,
                               overlay_input=overlay_idx, overlay_until=overlay_until,
                               color_filter=color.chain(options.get("color_filter")), video_fx=video_fx,
-                              mute=censor.mute_filter(muted), sfx_input=sfx_idx, band_top=band)
+                              mute=censor.mute_filter(muted), sfx_input=sfx_idx, band_top=band,
+                              overlay_from=head_end, big_texts=big_texts)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
@@ -416,6 +466,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         *(["-ss", f"{start + hook[0]:.3f}", "-t", f"{hook[1] - hook[0] + 0.1:.3f}", "-i", str(src)] if hook else []),
         *(["-loop", "1", "-framerate", str(fps), "-t", f"{out_duration + 0.5:.3f}", "-i", str(card_png)]
           if card_png else []),
+        *[a for png in (headline_png, cta_png) if png
+          for a in ("-loop", "1", "-framerate", str(fps), "-t", f"{out_duration + 0.5:.3f}", "-i", str(png))],
         *(["-i", str(sfx_path)] if sfx_path else []),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", config.get("render.video_preset"), "-crf", str(config.get("render.crf")),
@@ -424,7 +476,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "-movflags", "+faststart", "-t", f"{out_duration:.3f}", str(tmp_out),
     ]
     ffmpeg.run(args, ctx=ctx, duration=out_duration, on_progress=ctx.progress)
-    for tmp in (card_png, sfx_path):
+    for tmp in (card_png, sfx_path, headline_png, cta_png):
         if tmp:
             storage_remove(tmp)
 
@@ -457,5 +509,9 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "flip": list(flip) if flip else None,
                         "transition": transition if hook else None,
                         "sfx": options.get("sfx") if sfx_path else None, "muted_words": len(muted),
-                        "fps": fps, "tracks": plan.get("tracks", [])},
+                        "fps": fps, "tracks": plan.get("tracks", []),
+                        "viral": {"headline": options.get("viral_headline_text") if headline_png else None,
+                                  "cta": options.get("cta_text") if cta_png else None,
+                                  "intro_punch": intro_punch, "dynamism": dynamism if framing_x else None,
+                                  "angle_changes": len(angle_times)}},
     }

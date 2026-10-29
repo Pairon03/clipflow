@@ -147,7 +147,8 @@ def _connect() -> sqlite3.Connection:
 MIGRATIONS = [
     ("clips", "hook_json", "TEXT"),   # ganchos: candidatos, notas, escolha manual (pipeline/hooks.py)
     ("clips", "block_index", "INTEGER"),   # bloco do mapa do episódio de onde o corte saiu (pipeline/episode.py)
-    ("clips", "series_json", "TEXT"),      # parte de série: {id, part, total, block, story, recap, base}
+    ("clips", "series_json", "TEXT"),
+    ("clips", "headline", "TEXT"),         # manchete do estilo viral escrita pelo usuário (vazia = automática)      # parte de série: {id, part, total, block, story, recap, base}
 ]
 
 

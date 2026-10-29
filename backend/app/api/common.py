@@ -105,6 +105,9 @@ def validate_options(raw: dict | None) -> dict:
     censor = raw.get("censor") or "mudo"
     if censor not in {"mudo", "bip", "nenhum"}:
         raise HTTPException(422, "Modo de censura inválido")
+    dynamism = raw.get("dynamism") or "nenhum"
+    if dynamism not in {"nenhum", "medio", "alto"}:
+        raise HTTPException(422, "Nível de dinamismo inválido")
     color_filter = raw.get("color_filter") or "nenhum"
     if color_filter not in COLOR_FILTERS:
         raise HTTPException(422, "Filtro de cor inválido")
@@ -145,7 +148,12 @@ def validate_options(raw: dict | None) -> dict:
         "title_duration": title_duration,
         "title_position": title_position,
         "cold_open": bool(raw.get("cold_open", True)),
-        "series": bool(raw.get("series", True)),   # histórias fortes e longas viram série (Parte 1, 2…)
+        "series": bool(raw.get("series", True)),
+        # estilo viral (dicas de gancho) — tudo desligado por padrão
+        "viral_headline": bool(raw.get("viral_headline", False)),
+        "intro_punch": bool(raw.get("intro_punch", False)),
+        "dynamism": dynamism,
+        "end_cta": bool(raw.get("end_cta", False)),   # histórias fortes e longas viram série (Parte 1, 2…)
         "color_filter": color_filter,
         "transition": transition,
         "zoom_fx": bool(raw.get("zoom_fx", True)),
