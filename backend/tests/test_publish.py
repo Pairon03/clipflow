@@ -208,3 +208,15 @@ def test_text_rules_and_tiktok_caption(client):
     clip = _clip()
     cap = client.get(f"/api/clips/{clip['id']}/tiktok-caption?title=1").json()["caption"]
     assert cap.startswith("Outro título\n\n🎯 Ele responde") and cap.endswith("#shorts #cortes")
+
+
+def test_failed_connection_error_stays_visible(google, client):
+    client.put("/api/youtube/client", content=json.dumps(CLIENT_JSON).encode())
+    url = client.post("/api/youtube/connect").json()["url"]
+    state = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(url).query))["state"]
+    r = client.get(f"/?state={state}&code=codigo-errado", follow_redirects=False)     # Google recusa o código
+    assert r.status_code == 303 and "youtube=erro" in r.headers["location"]
+    acc = client.get("/api/youtube/account").json()
+    assert acc["last_error"] and not acc["connected"]
+    _connect(google, client)
+    assert client.get("/api/youtube/account").json()["last_error"] == ""

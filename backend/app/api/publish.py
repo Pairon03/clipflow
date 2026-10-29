@@ -60,15 +60,28 @@ def youtube_disconnect():
 
 def oauth_callback(params: dict) -> str:
     """Trata o retorno do Google (chamado pelo app principal na rota "/"). Devolve para onde redirecionar."""
+    import logging
+
+    log = logging.getLogger("clipflow.youtube")
     state, code, error = params.get("state"), params.get("code"), params.get("error")
     if error:
         youtube_api.finish_auth_cancelled(state)
-        msg = "Autorização cancelada" if error == "access_denied" else f"O Google recusou: {error}"
+        msg = "Autorização cancelada no Google" if error == "access_denied" else f"O Google recusou: {error}"
+        youtube_api.save_last_error(msg)
+        log.warning("Conexão do YouTube: %s", msg)
         return "/publicar?youtube=erro&msg=" + _q(msg)
     try:
         youtube_api.finish_auth(state, code or "")
     except YouTubeError as exc:
+        youtube_api.save_last_error(str(exc))
+        log.warning("Conexão do YouTube falhou: %s", exc)
         return "/publicar?youtube=erro&msg=" + _q(str(exc))
+    except Exception as exc:  # noqa: BLE001 — mostra qualquer falha em vez de uma página de erro genérica
+        msg = f"Erro inesperado ao concluir a conexão: {exc}"
+        youtube_api.save_last_error(msg)
+        log.exception("Conexão do YouTube falhou")
+        return "/publicar?youtube=erro&msg=" + _q(msg)
+    youtube_api.save_last_error("")
     publisher.publisher.wake()
     return "/publicar?youtube=ok"
 

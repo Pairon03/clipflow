@@ -121,6 +121,9 @@ async function act(p, what) {
       <p v-if="account?.has_client && !account?.connected && !localHost" class="mt-3 text-xs text-amber-300">
         Para conectar, abra o ClipFlow no próprio computador onde ele roda (http://127.0.0.1:{{ port }}). O Google só devolve a autorização para esse endereço.
       </p>
+      <div v-if="account?.last_error && !account?.connected" class="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+        <b>Última tentativa de conexão falhou:</b> {{ account.last_error }}
+      </div>
       <div v-if="account?.connected" class="mt-4 flex gap-2 rounded-xl border border-ink-700 bg-ink-850 p-3 text-xs leading-relaxed text-ink-300">
         <TriangleAlert class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
         <span>Enquanto o Google não auditar o seu projeto, vídeos enviados pela API ficam <b>privados</b> (mesmo os agendados).

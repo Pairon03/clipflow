@@ -239,8 +239,8 @@ def finish_auth(state: str, code: str) -> dict:
         raise YouTubeError("O Google não devolveu a autorização permanente. Tente conectar de novo.", "auth")
     granted = set(str(data.get("scope", "")).split())
     if SCOPES[0] not in granted:
-        raise YouTubeError("A permissão para enviar vídeos não foi concedida. Marque todas as caixas ao "
-                           "autorizar.", "auth")
+        raise YouTubeError("A permissão \"Gerenciar seus vídeos do YouTube\" não foi marcada. Clique em Conectar "
+                           "de novo e, na tela do Google, marque TODAS as caixas (ou \"Selecionar tudo\").", "auth")
     tok = {"refresh_token": data["refresh_token"], "access_token": data.get("access_token", ""),
            "expires_at": time.time() + float(data.get("expires_in", 3600)), "scope": data.get("scope", "")}
     _write_private(token_path(), tok)
@@ -291,6 +291,22 @@ def fetch_channel(access: str | None = None) -> dict | None:
             "thumbnail": thumb}
 
 
+def save_last_error(msg: str) -> None:
+    """Último erro ao conectar (mostrado fixo na aba Publicar até dar certo)."""
+    path = _dir() / "last_error.txt"
+    if msg:
+        path.write_text(msg[:500], encoding="utf-8")
+    else:
+        storage.remove_quietly(path)
+
+
+def last_error() -> str:
+    try:
+        return (_dir() / "last_error.txt").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
 def mark_invalid(reason: str) -> None:
     """A autorização foi recusada pelo Google: fica marcada até o usuário conectar de novo."""
     tok = token()
@@ -305,7 +321,8 @@ def status() -> dict:
     invalid = bool(has_token and tok.get("invalid"))
     return {"has_client": bool(c), "project_id": (c or {}).get("project_id", ""),
             "connected": has_token and not invalid, "needs_reconnect": invalid,
-            "problem": (tok or {}).get("invalid") or "", "channel": (tok or {}).get("channel")}
+            "problem": (tok or {}).get("invalid") or "", "channel": (tok or {}).get("channel"),
+            "last_error": last_error() if not (has_token and not invalid) else ""}
 
 
 # ------------------------------------------------------------------ envio
