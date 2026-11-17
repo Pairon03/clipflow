@@ -106,6 +106,9 @@ const form = reactive({
   intro_punch: false,
   dynamism: 'nenhum',
   end_cta: false,
+  motion: 'nenhum',
+  motion_teaser: true,
+  motion_bubble: true,
   sfx: 'sutil',
   censor: 'mudo',
   rightsConfirmed: false,
@@ -149,6 +152,7 @@ async function submit(force = false) {
         transition: form.transition, zoom_fx: form.zoom_fx, sfx: form.sfx, censor: form.censor, flip_fx: form.flip_fx,
         series: form.series, viral_headline: form.viral_headline, intro_punch: form.intro_punch,
         dynamism: form.dynamism, end_cta: form.end_cta,
+        motion: form.motion, motion_teaser: form.motion_teaser, motion_bubble: form.motion_bubble,
       },
       force,
     }

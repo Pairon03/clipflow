@@ -17,6 +17,11 @@ const dynamisms = [
   { key: 'medio', name: 'Médio' },
   { key: 'alto', name: 'Alto' },
 ]
+const motions = [
+  { key: 'nenhum', name: 'Desligada' },
+  { key: 'auto', name: 'Automático' },
+  { key: 'inicio', name: 'No começo' },
+]
 function viralAll(on, opts) {
   opts.viral_headline = on
   opts.intro_punch = on
@@ -62,6 +67,23 @@ const censors = [
       <span>Inversão momentânea da imagem<span class="block text-xs text-ink-500">Espelha por ~1 s e volta; uma vez por vídeo</span></span>
       <input v-model="opts.flip_fx" type="checkbox" class="h-4 w-4 accent-violet-500" />
     </label>
+    <div class="rounded-xl border border-ink-700 bg-ink-850 p-3" :class="{ 'sm:col-span-2': wide }">
+      <span class="label">Explicação animada (opcional)</span>
+      <p class="mb-3 text-xs text-ink-500">Trechos curtos viram animação (títulos, números, ícones, gráficos) com a fala real por baixo. Você ajusta as cenas no editor de cada corte.</p>
+      <div class="flex flex-wrap gap-2">
+        <button v-for="m in motions" :key="m.key" type="button" class="chip py-1.5" :class="{ 'chip-active': (opts.motion || 'nenhum') === m.key }" @click="opts.motion = m.key">{{ m.name }}</button>
+      </div>
+      <div v-if="(opts.motion || 'nenhum') !== 'nenhum'" class="mt-3 grid gap-3" :class="{ 'sm:grid-cols-2': wide }">
+        <label class="flex items-center justify-between gap-3 text-ink-200">
+          <span>Teaser no 1º segundo<span class="block text-xs text-ink-500">Flash da animação abrindo o vídeo</span></span>
+          <input v-model="opts.motion_teaser" type="checkbox" class="h-4 w-4 accent-violet-500" />
+        </label>
+        <label class="flex items-center justify-between gap-3 text-ink-200">
+          <span>Rosto em bolha<span class="block text-xs text-ink-500">Quem fala aparece num círculo durante a animação</span></span>
+          <input v-model="opts.motion_bubble" type="checkbox" class="h-4 w-4 accent-violet-500" />
+        </label>
+      </div>
+    </div>
     <div class="rounded-xl border border-ink-700 bg-ink-850 p-3" :class="{ 'sm:col-span-2': wide }">
       <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span class="label mb-0">Estilo viral (opcional)</span>

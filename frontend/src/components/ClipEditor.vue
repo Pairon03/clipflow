@@ -5,6 +5,7 @@ import { api, fileUrl } from '../api'
 import { fmtTime, toast, LAYOUT_LABELS, STATUS } from '../utils'
 import ScoreBreakdown from './ScoreBreakdown.vue'
 import HookPicker from './HookPicker.vue'
+import MotionEditor from './MotionEditor.vue'
 
 const props = defineProps({
   clip: Object,
@@ -193,6 +194,7 @@ function nudge(which, delta) {
           </div>
           <p class="mt-1 text-xs text-ink-500">Deixe vazio para usar a automática. Aparece em letras grandes nos 2–3 primeiros segundos.</p>
         </div>
+        <MotionEditor v-if="project?.options?.motion && project.options.motion !== 'nenhum'" :clip-id="clip.id" :busy="saving || busy" @changed="emit('changed')" />
         <div v-if="project?.options?.cold_open">
           <span class="label">Gancho de abertura</span>
           <HookPicker :hook="clip.hook" :clip-start="clip.start" :disabled="saving || busy" @choose="chooseHook" />

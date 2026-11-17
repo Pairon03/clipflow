@@ -363,6 +363,14 @@ def _clip_options(opts: dict, meta: dict, clip: dict, index: int | None) -> dict
         # manchete escrita pelo usuário no editor do corte tem prioridade sobre a automática
         extra["viral_headline_text"] = (clip.get("headline") or "").strip().upper() or \
             viral.headline_text(meta.get("card"))
+    if opts.get("motion", "nenhum") != "nenhum":
+        m = clip.get("motion") or {}
+        mode = m.get("mode") or opts["motion"]
+        extra["motion_mode"] = "nenhum" if mode == "off" else mode
+        extra["motion_plan"] = m.get("blocks") if m.get("edited") else None
+        from . import llm
+
+        extra["motion_ai"] = llm.enabled()
     if opts.get("end_cta"):
         extra["cta_text"] = viral.cta_text(clip.get("category"), part.get("part"), part.get("total"))
     return opts | {"title_style_resolved": overlay.resolve_style(style, clip["id"], index),

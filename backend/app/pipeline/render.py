@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
-from . import censor, color, enhance, ffmpeg, framing, hooks, overlay, sfx, subtitles, viral
+from . import censor, color, enhance, ffmpeg, framing, hooks, motion, overlay, sfx, subtitles, viral
 from .context import JobContext
 from .errors import PipelineError
 
@@ -195,7 +195,10 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
                       overlay_until: float | None = None, color_filter: str | None = None,
                       video_fx: str | None = None, mute: str | None = None, sfx_input: int | None = None,
                       band_top: int = 0, overlay_from: float = 0.0,
-                      big_texts: list[tuple[int, float, float]] | None = None) -> str:
+                      big_texts: list[tuple[int, float, float]] | None = None,
+                      motion_inputs: list[tuple[int, float, float]] | None = None,
+                      bubble_windows: list[tuple[float, float]] | None = None,
+                      teaser: tuple[int, float] | None = None) -> str:
     """Monta o filtro do FFmpeg.
 
     Os trechos mantidos são escolhidos numa única passada (select/aselect), sem duplicar o vídeo
@@ -207,6 +210,9 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     `band_top`: altura (px) de uma faixa branca no topo; o vídeo é enquadrado na área abaixo dela.
     `overlay_from`: o título só entra a partir deste instante (estilo viral: depois da manchete).
     `big_texts`: (entrada, início, fim) de PNGs de texto grande (manchete/chamada) com "pop" de entrada.
+    `motion_inputs`: (entrada, início, fim) dos blocos animados (vídeo com transparência), por cima do título.
+    `bubble_windows`: janelas em que o rosto de quem fala aparece num círculo sobre a animação.
+    `teaser`: (entrada, duração) do flash da animação no começo do vídeo.
     """
     out_w, out_h = config.get("render.width"), config.get("render.height")
     parts: list[str] = []
@@ -228,16 +234,37 @@ def build_filtergraph(intervals: list[tuple[float, float]], plan: dict, src_w: i
     parts.append(layout_filter(plan, src_w, src_h, out_w, out_h - band_top, "vf", "vgr" if post_layout else "vlay"))
     if post_layout:
         parts.append(f"[vgr]{post_layout}[vlay]")
+    if bubble_windows:
+        from .motion import bubble_filter
+
+        parts.append("[vlay]split=2[vlay0][vface]")
+        parts.append(bubble_filter("vface", "bub", out_w, out_h))
+        vbase = "vlay0"
+    else:
+        vbase = "vlay"
     if overlay_input is not None:
         # título (PNG transparente do tamanho do vídeo) com entrada suave; some no fim se for "só no início"
         fade = f"fade=t=in:st={overlay_from:.3f}:d=0.3:alpha=1"
         if overlay_until:
             fade += f",fade=t=out:st={max(overlay_until - 0.3, 0):.3f}:d=0.3:alpha=1"
         parts.append(f"[{overlay_input}:v]format=rgba,{fade}[ttl]")
-        parts.append("[vlay][ttl]overlay=0:0:format=auto:shortest=1[vl]")
+        parts.append(f"[{vbase}][ttl]overlay=0:0:format=auto:shortest=1[vl]")
     else:
-        parts.append("[vlay]null[vl]")
+        parts.append(f"[{vbase}]null[vl]")
     cur = "vl"
+    for k, (idx, t0, t1) in enumerate(motion_inputs or []):
+        parts.append(f"[{idx}:v]format=rgba,setpts=PTS-STARTPTS+{t0:.3f}/TB[mo{k}]")
+        parts.append(f"[{cur}][mo{k}]overlay=0:0:eof_action=pass:format=auto:enable='between(t,{t0:.3f},{t1:.3f})'[vm{k}]")
+        cur = f"vm{k}"
+    if bubble_windows:
+        en = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in bubble_windows)
+        parts.append(f"[{cur}][bub]overlay=x=(W-w)/2:y={int(out_h * 0.735)}:format=auto:enable='{en}'[vbb]")
+        cur = "vbb"
+    if teaser:
+        idx, td = teaser
+        parts.append(f"[{idx}:v]format=rgba,setpts=PTS-STARTPTS[tz]")
+        parts.append(f"[{cur}][tz]overlay=0:0:eof_action=pass:format=auto:enable='between(t,0,{td:.3f})'[vtz]")
+        cur = "vtz"
     for k, (idx, t0, t1) in enumerate(big_texts or []):
         # entra crescendo de 115% para 100% em 0,18 s e some com fade de 0,2 s
         pop = f"(1+0.15*clip(1-(t-{t0:.3f})/0.18,0,1))"
@@ -430,6 +457,32 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         if dynamism in viral.DYNAMISM and not split else []
     framing_x = viral.framing_exprs(angle_times, dynamism)
     intro_punch = bool(options.get("intro_punch"))
+    # motion graphics (opcional): blocos animados, teaser no começo e rosto em bolha
+    motion_mode = options.get("motion_mode") or options.get("motion", "nenhum")
+    motion_src, motion_out, motion_kept, motion_files, teaser_file = [], [], [], [], None
+    if motion_mode in ("auto", "inicio") and out_duration > 8:
+        motion_src = options.get("motion_plan")
+        if motion_src is None:
+            rel = [{"text": w["text"], "start": w["start"] - start, "end": w["end"] - start} for w in words]
+            motion_src = motion.plan(rel, end - start, motion_mode, use_llm=bool(options.get("motion_ai")),
+                                     log=ctx.log)
+        for k, blk in enumerate(motion_src):
+            to = lambda x: round(hook_out + tmap.map(min(max(float(x), 0.0), end - start)), 3)  # noqa: E731
+            b_out = {"start": to(blk["start"]), "end": to(blk["end"]),
+                     "scenes": [dict(sc) | {"at": to(sc["at"]),
+                                            "items": [dict(it) | {"at": to(it["at"])} for it in sc.get("items") or []]}
+                                for sc in blk["scenes"]]}
+            if b_out["end"] - b_out["start"] < 2.0:
+                continue
+            ctx.check()
+            motion_files.append(motion.render_block(b_out, work_dir / f"{clip_id}{variant}.m{k}.mov",
+                                                    out_w, out_h, ctx))
+            motion_out.append(b_out)
+            motion_kept.append(blk)
+        if motion_out and options.get("motion_teaser", True) and motion_out[0]["start"] > 2.0:
+            teaser_file = motion.render_teaser(motion_out[0], work_dir / f"{clip_id}{variant}.teaser.mov",
+                                               out_w, out_h)
+    motion_pops = [t for b in motion_out for t in motion.appear_times(b)] + ([0.03] if teaser_file else [])
     if headline_png and overlay_until:
         overlay_until += head_end                       # título "só no início" entra depois da manchete
     if cta_png and (overlay_until is None or overlay_until > cta_start):
@@ -440,7 +493,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                                whoosh_at=hook_out if hook and transition != "nenhuma" else None,
                                pop_at=([head_end + 0.05] if has_title else []) + [s for s, _ in zooms]
                                + ([flip[0]] if flip else []) + ([0.03] if headline_png else [])
-                               + ([cta_start] if cta_png else []),
+                               + ([cta_start] if cta_png else []) + motion_pops,
                                bips=muted if censor_mode == "bip" else None)
     nxt = 1 + bool(hook)
     overlay_idx = nxt if card_png else None
@@ -450,13 +503,22 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         big_texts.append((nxt, 0.0, head_end)); nxt += 1
     if cta_png:
         big_texts.append((nxt, cta_start, out_duration)); nxt += 1
+    motion_inputs = []
+    for b_out in motion_out:
+        motion_inputs.append((nxt, b_out["start"], b_out["end"])); nxt += 1
+    teaser_in = None
+    if teaser_file:
+        teaser_in = (nxt, 0.9); nxt += 1
+    bubble_windows = [(b["start"] + motion.REVEAL_S, b["end"] - motion.REVEAL_S) for b in motion_out] \
+        if options.get("motion_bubble", True) and not band else []
     sfx_idx = nxt if sfx_path else None
     graph = build_filtergraph(intervals, plan, src_w, src_h, fps, ass_path, out_duration, speed,
                               hook_len=(hook[1] - hook[0]) if hook else None,
                               overlay_input=overlay_idx, overlay_until=overlay_until,
                               color_filter=color.chain(options.get("color_filter")), video_fx=video_fx,
                               mute=censor.mute_filter(muted), sfx_input=sfx_idx, band_top=band,
-                              overlay_from=head_end, big_texts=big_texts)
+                              overlay_from=head_end, big_texts=big_texts, motion_inputs=motion_inputs,
+                              bubble_windows=bubble_windows, teaser=teaser_in)
     (work_dir / f"{clip_id}.filtergraph.txt").write_text(graph, encoding="utf-8")
     # `variant` gera um arquivo à parte (ex.: "_clean", sem legenda, para edição no Concat)
     tmp_out = work_dir / f"{clip_id}{variant}.partial.mp4"
@@ -468,6 +530,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
           if card_png else []),
         *[a for png in (headline_png, cta_png) if png
           for a in ("-loop", "1", "-framerate", str(fps), "-t", f"{out_duration + 0.5:.3f}", "-i", str(png))],
+        *[a for f in (*motion_files, *([teaser_file] if teaser_file else [])) for a in ("-i", str(f))],
         *(["-i", str(sfx_path)] if sfx_path else []),
         "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
         "-c:v", "libx264", "-preset", config.get("render.video_preset"), "-crf", str(config.get("render.crf")),
@@ -476,7 +539,7 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
         "-movflags", "+faststart", "-t", f"{out_duration:.3f}", str(tmp_out),
     ]
     ffmpeg.run(args, ctx=ctx, duration=out_duration, on_progress=ctx.progress)
-    for tmp in (card_png, sfx_path, headline_png, cta_png):
+    for tmp in (card_png, sfx_path, headline_png, cta_png, *motion_files, teaser_file):
         if tmp:
             storage_remove(tmp)
 
@@ -510,6 +573,8 @@ def render_clip(src: Path, src_info: dict, clip: dict, words: list[dict], option
                         "transition": transition if hook else None,
                         "sfx": options.get("sfx") if sfx_path else None, "muted_words": len(muted),
                         "fps": fps, "tracks": plan.get("tracks", []),
+                        "motion": {"mode": motion_mode if motion_out else None, "blocks": motion_kept,
+                                   "teaser": bool(teaser_file)},
                         "viral": {"headline": options.get("viral_headline_text") if headline_png else None,
                                   "cta": options.get("cta_text") if cta_png else None,
                                   "intro_punch": intro_punch, "dynamism": dynamism if framing_x else None,

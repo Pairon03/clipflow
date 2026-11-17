@@ -275,6 +275,7 @@ PREFERENCE_KEYS = (
     "caption_style", "layout", "pace", "speed", "cold_open", "title_style", "title_duration", "title_position",
     "color_filter", "transition", "zoom_fx", "flip_fx", "sfx", "censor", "engine", "hook", "zoom",
     "min_duration", "max_duration", "count", "series", "viral_headline", "intro_punch", "dynamism", "end_cta",
+    "motion", "motion_teaser", "motion_bubble",
 )
 
 

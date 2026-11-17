@@ -25,7 +25,7 @@ const showAlternatives = ref(false)
 const publishing = ref(null)
 const reselect = ref({ count: 5, min_duration: 30, max_duration: 60 })
 const edit = ref({ pace: 'tiktok', speed: 1.0, cold_open: true, title_style: 'tweet', title_duration: 'inteiro',
-  title_position: 'topo', color_filter: 'nenhum', transition: 'zoom', zoom_fx: true, flip_fx: true, sfx: 'sutil', censor: 'mudo', viral_headline: false, intro_punch: false, dynamism: 'nenhum', end_cta: false })
+  title_position: 'topo', color_filter: 'nenhum', transition: 'zoom', zoom_fx: true, flip_fx: true, sfx: 'sutil', censor: 'mudo', viral_headline: false, intro_punch: false, dynamism: 'nenhum', end_cta: false, motion: 'nenhum', motion_teaser: true, motion_bubble: true })
 let timer
 
 const active = computed(() => p.value && ACTIVE.includes(p.value.status))
@@ -53,7 +53,8 @@ watch(() => p.value?.options, (o) => {
       title_style: o.title_style || (o.theme === false ? 'nenhum' : 'tweet'), title_duration: o.title_duration || 'inteiro',
       title_position: o.title_position || 'topo', color_filter: o.color_filter || 'nenhum',
       transition: o.transition || 'zoom', zoom_fx: o.zoom_fx ?? true, flip_fx: o.flip_fx ?? true,
-      viral_headline: !!o.viral_headline, intro_punch: !!o.intro_punch, dynamism: o.dynamism || 'nenhum', end_cta: !!o.end_cta, sfx: o.sfx || 'sutil',
+      viral_headline: !!o.viral_headline, intro_punch: !!o.intro_punch, dynamism: o.dynamism || 'nenhum', end_cta: !!o.end_cta,
+      motion: o.motion || 'nenhum', motion_teaser: o.motion_teaser ?? true, motion_bubble: o.motion_bubble ?? true, sfx: o.sfx || 'sutil',
       censor: o.censor || 'mudo' }
   }
 }, { immediate: true })

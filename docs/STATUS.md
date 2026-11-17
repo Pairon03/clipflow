@@ -3,8 +3,8 @@
 Legenda: ✅ implementado e testado · 🟡 implementado, verificação parcial · 🧪 testado apenas com simulação ·
 ⏳ pendente (fase futura)
 
-Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **197 testes automatizados:
-195 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
+Ambiente de testes: Linux, Python 3.13, FFmpeg 6.1 (libass), Chromium headless. **205 testes automatizados:
+203 passam, 2 são pulados** (Whisper e Concat real — ver abaixo). O fluxo completo também foi percorrido pela interface real no
 navegador (upload → revisão → render → biblioteca), sem erros no console.
 
 ## Fase 1 — MVP
@@ -116,6 +116,18 @@ navegador (upload → revisão → render → biblioteca), sem erros no console.
 | Troca de enquadramento a cada frase (médio / alto) | ✅ | desligada no layout dividido |
 | Chamada final ("Você concorda? Comenta aqui"; séries: "Continua na Parte N") | ✅ | o título sai quando ela entra |
 | Tudo desligado por padrão, com "Ligar tudo" | ✅ | conferido no navegador |
+
+## Explicação animada (opcional)
+
+| Funcionalidade | Status | Observações |
+|---|---|---|
+| Roteiro automático pela fala (blocos de 3,5–10 s, até 3 por corte, ≥4 s de podcast entre eles) | 🟡 | heurística; boa com números e nomes, fraca em falas abstratas — o editor corrige |
+| Cenas: título + ícone, número grande, cartões, comparação (Pillow → .mov com transparência) | ✅ | conferidas nos quadros |
+| Modos Automático / No começo, por projeto e por corte | ✅ | |
+| Teaser de ~1 s no início, rosto em bolha, legenda grande por cima | ✅ | conferidos no quadro renderizado |
+| Editor de cenas no corte (tempos, tipo, ícone, textos) | ✅ | conferido no navegador |
+| Refinamento opcional pela IA local (Ollama), validado contra a transcrição | 🧪 | uma chamada por corte; testado com resposta simulada (texto não dito é descartado) |
+| Temas de cor | ⏳ | próxima etapa |
 
 ## Publicação
 

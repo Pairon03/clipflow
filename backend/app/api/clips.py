@@ -86,6 +86,13 @@ def patch_clip(cid: str, body: ClipPatch):
         fields["hashtags_json"] = [h.strip()[:40] for h in body.hashtags if h.strip()][:15]
     if "start" in fields:
         fields["hook_json"] = None                  # corte mudou: o gancho é avaliado de novo no render
+    if ("start" in fields or "end" in fields) and (clip.get("motion") or {}).get("edited"):
+        from ..pipeline import motion
+
+        new_start, new_end = fields.get("start", clip["start"]), fields.get("end", clip["end"])
+        m = clip["motion"]
+        blocks = motion.shift_blocks(m.get("blocks") or [], clip["start"] - new_start, new_end - new_start)
+        fields["motion_json"] = m | {"blocks": blocks}   # as cenas seguem a mesma fala no corte novo
     elif body.hook_choice is not None:
         hook = clip.get("hook")
         if not hook:
@@ -283,3 +290,50 @@ def clip_headline(cid: str):
     meta = metadata.heuristic(clip.get("text") or "", project.get("source_title") or project["name"],
                               clip.get("category") or "")
     return {"auto": viral.headline_text(meta.get("card")), "custom": clip.get("headline")}
+
+
+# ------------------------------------------------------------------ explicação animada (motion graphics)
+class MotionIn(BaseModel):
+    mode: str = "projeto"                  # projeto | auto | inicio | off
+    blocks: list[dict] | None = None       # roteiro editado (segundos relativos ao começo do corte); None = automático
+
+
+def _motion_view(clip: dict) -> dict:
+    from ..pipeline import motion
+
+    m = clip.get("motion") or {}
+    project = get_project_or_404(clip["project_id"])
+    proj_mode = (project.get("options") or {}).get("motion", "nenhum")
+    mode = m.get("mode") or "projeto"
+    effective = proj_mode if mode == "projeto" else ("nenhum" if mode == "off" else mode)
+    blocks = m.get("blocks") if m.get("edited") else None
+    if blocks is None and effective in ("auto", "inicio"):
+        words = [{"text": w["text"], "start": w["start"] - clip["start"], "end": w["end"] - clip["start"]}
+                 for w in _clip_words(clip)]
+        blocks = motion.plan(words, clip["end"] - clip["start"], effective)
+    return {"mode": mode, "effective": effective, "project_mode": proj_mode, "edited": bool(m.get("edited")),
+            "blocks": blocks or [], "duration": round(clip["end"] - clip["start"], 2),
+            "icons": sorted(motion.available_icons()), "kinds": list(motion.KINDS)}
+
+
+@router.get("/clips/{cid}/motion")
+def get_motion(cid: str):
+    return _motion_view(get_clip_or_404(cid))
+
+
+@router.put("/clips/{cid}/motion")
+def put_motion(cid: str, body: MotionIn):
+    from ..pipeline import motion
+
+    clip = get_clip_or_404(cid)
+    if body.mode not in ("projeto", "auto", "inicio", "off"):
+        raise HTTPException(422, "Modo de animação inválido")
+    blocks = None
+    if body.blocks is not None:
+        blocks = motion.validate_blocks(body.blocks, clip["end"] - clip["start"])
+    data = {"mode": body.mode, "blocks": blocks, "edited": blocks is not None}
+    fields = {"motion_json": data}
+    if clip["status"] == "done":
+        fields["render_info_json"] = (clip.get("render_info") or {}) | {"stale": True}
+    db.update("clips", cid, **fields)
+    return _motion_view(get_clip_or_404(cid))
